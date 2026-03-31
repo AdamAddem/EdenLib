@@ -21,5 +21,6 @@ add_executable(Eden
         type_traits.hpp
         typedefs.hpp
         eden_all.hpp
+        enum_utils.hpp
         lifetime_observer.hpp
 )
