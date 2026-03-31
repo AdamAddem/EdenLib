@@ -7,6 +7,9 @@
 #include <format>
 #include <memory>
 
+namespace eden {
+
+
 template <class T, class Allocator = std::allocator<T>>
 class releasing_vector {
   static constexpr sz_t value_size = sizeof(T);
@@ -101,7 +104,7 @@ public:
 
     [[nodiscard]] constexpr const_iterator
     operator++(int) noexcept
-    {const_iterator tmp = *this; ++(*this); return tmp;}
+    {const_iterator tmp = *this; ++m_ptr; return tmp;}
 
     [[nodiscard]] constexpr const_iterator&
     operator--() noexcept
@@ -109,7 +112,7 @@ public:
 
     [[nodiscard]] constexpr const_iterator
     operator--(int) noexcept
-    {const_iterator tmp = *this; --(*this); return tmp;}
+    {const_iterator tmp = *this; --m_ptr; return tmp;}
 
     [[nodiscard]] constexpr const_iterator&
     operator+=(sz_t n) noexcept
@@ -118,9 +121,6 @@ public:
     [[nodiscard]] constexpr const_iterator&
     operator-=(sz_t n) noexcept
     {m_ptr -= n; return *this;}
-
-    [[nodiscard]] friend constexpr bool
-    operator<=>(const_iterator, const_iterator) noexcept = default;
 
     [[nodiscard]] friend constexpr std::ptrdiff_t
     operator-(const_iterator lhs, const_iterator rhs) noexcept
@@ -132,7 +132,7 @@ public:
 
     [[nodiscard]] friend constexpr const_iterator
     operator+(sz_t n, const_iterator rhs) noexcept
-    {return iterator(n + rhs.m_ptr);}
+    {return iterator(rhs.m_ptr - n);}
 
     [[nodiscard]] friend constexpr const_iterator
     operator-(const_iterator lhs, sz_t n) noexcept
@@ -140,6 +140,10 @@ public:
 
     [[nodiscard]] friend constexpr bool
     operator==(const const_iterator& a, const const_iterator& b) noexcept = default;
+
+    [[nodiscard]] constexpr auto
+    operator<=>(const const_iterator& other) const noexcept
+    {return m_ptr <=> other.m_ptr;}
 
   private:
     T* m_ptr;
@@ -177,7 +181,7 @@ public:
 
     [[nodiscard]] constexpr iterator
     operator++(int) noexcept
-    {iterator tmp = *this; ++(*this); return tmp;}
+    {iterator tmp = *this; ++m_ptr; return tmp;}
 
     [[nodiscard]] constexpr iterator&
     operator--() noexcept
@@ -185,7 +189,7 @@ public:
 
     [[nodiscard]] constexpr iterator
     operator--(int) noexcept
-    {iterator tmp = *this; --(*this); return tmp;}
+    {iterator tmp = *this; --m_ptr; return tmp;}
 
     [[nodiscard]] constexpr iterator&
     operator+=(sz_t n) noexcept
@@ -195,12 +199,9 @@ public:
     operator-=(sz_t n) noexcept
     {m_ptr -= n; return *this;}
 
-    [[nodiscard]] constexpr
+    [[nodiscard]] explicit constexpr
     operator const_iterator() const noexcept
     {return const_iterator(m_ptr);}
-
-    [[nodiscard]] friend constexpr bool
-    operator<=>(iterator, iterator) noexcept = default;
 
     [[nodiscard]] friend constexpr std::ptrdiff_t
     operator-(iterator lhs, iterator rhs) noexcept
@@ -212,7 +213,7 @@ public:
 
     [[nodiscard]] friend constexpr iterator
     operator+(sz_t n, iterator rhs) noexcept
-    {return iterator(n + rhs.m_ptr);}
+    {return iterator(rhs.m_ptr + n);}
 
     [[nodiscard]] friend constexpr iterator
     operator-(iterator lhs, sz_t n) noexcept
@@ -220,6 +221,10 @@ public:
 
     [[nodiscard]] friend constexpr bool
     operator==(const iterator& a, const iterator& b) noexcept = default;
+
+    [[nodiscard]] constexpr auto
+    operator<=>(const iterator& other) const noexcept
+    {return m_ptr <=> other.m_ptr;}
 
   private:
     T* m_ptr;
@@ -313,17 +318,15 @@ public:
 
   [[nodiscard]] constexpr T&
   at(sz_t pos) {
-    assume_assert(m_begin);
     if (m_begin + pos >= m_size)
-      throw std::out_of_range(std::format("Element access at index {} with size of {} in releasing_vector.", pos, capacity()));
+      throw std::out_of_range(std::format("Element access at index {} eden::releasing_vector with size of {}.", pos, size()));
     return *(m_begin + pos);
   }
 
   [[nodiscard]] constexpr const T&
   at(sz_t pos) const {
-    assume_assert(m_begin);
     if (m_begin + pos >= m_size)
-      throw std::out_of_range(std::format("Element access at index {} with size of {} in releasing_vector.", pos, capacity()));
+      throw std::out_of_range(std::format("Element access at index {} eden::releasing_vector with size of {}.", pos, size()));
     return *(m_begin + pos);
   }
 
@@ -373,15 +376,15 @@ public:
 
   [[nodiscard]] constexpr reverse_iterator
   rend() noexcept
-  {return reverse_iterator(begin() - 1);}
+  {return reverse_iterator(begin());}
 
   [[nodiscard]] constexpr const_reverse_iterator
   rend() const noexcept
-  {return const_reverse_iterator(cbegin() - 1);}
+  {return const_reverse_iterator(cbegin());}
 
   [[nodiscard]] constexpr const_reverse_iterator
   crend() const noexcept
-  {return const_reverse_iterator(cbegin() - 1);}
+  {return const_reverse_iterator(cbegin());}
 
   [[nodiscard]] constexpr T&
   front() noexcept
@@ -398,7 +401,6 @@ public:
   {assume_assert(m_size); return *(m_size - 1);}
 
   [[nodiscard]] constexpr owned_ptr<T[]> release() noexcept {
-    assume_assert(m_begin);
     if constexpr (is_string) {
       if (m_size == m_cap)
         expand_to(capacity() + 1);
@@ -410,7 +412,7 @@ public:
   }
 
   [[nodiscard]] constexpr
-  operator std::string_view() noexcept
+  explicit operator std::string_view() noexcept
   requires is_string
   {return std::string_view(m_begin, size());}
 
@@ -440,8 +442,14 @@ public:
     return terminated_string[i] == '\0';
   }
 
-  [[nodiscard]] constexpr bool empty() const noexcept {return m_size == m_begin;}
-  [[nodiscard]] constexpr sz_t size() const noexcept {return m_size - m_begin;}
+  [[nodiscard]] constexpr bool
+  empty() const noexcept
+  {return m_size == m_begin;}
+
+  [[nodiscard]] constexpr sz_t
+  size() const noexcept
+  {return m_size - m_begin;}
+
   constexpr void reserve(sz_t new_capacity) const noexcept
   {if (capacity() < new_capacity) expand_to(new_capacity);}
 
@@ -479,7 +487,9 @@ public:
       std::construct_at(m_size + i++, value);
   }
 
-  [[nodiscard]] constexpr sz_t capacity() const noexcept {return m_cap - m_begin;}
+  [[nodiscard]] constexpr sz_t
+  capacity() const noexcept
+  {return m_cap - m_begin;}
 
   constexpr void shrink_to_fit() const noexcept {
     if (size() not_eq capacity())
@@ -496,14 +506,14 @@ public:
       m_cap = m_begin + 2;
     }
     else if (m_size == m_cap)
-      expand_to(capacity());
+      expand_to(capacity() * expansion_mod);
     std::construct_at(m_size, std::forward<Args>(args)...);
     return *(m_size++);
   }
 
   constexpr void push_back(const T &value)
   noexcept(nothrow_copy_construct)
-  {emplace_back(std::forward<T>(value));}
+  {emplace_back(value);}
 
   constexpr void push_back(T &&value)
   noexcept(std::is_nothrow_move_constructible_v<T>)
@@ -529,4 +539,6 @@ requires requires (T a, T b) {a == b;} {
       return false;
   }
   return true;
+}
+
 }

@@ -1,4 +1,3 @@
-a.out
-makefile
-compile_flags.txt
 main.cpp
+build/
+.idea/

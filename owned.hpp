@@ -2,6 +2,7 @@
 #include <cstring>
 #include <span>
 
+namespace eden {
 /* Owned Pointer:
  *  -Intended to be a wrapper for a raw pointer, with similar semantics to unique_ptr
  *  -Differs from unique_ptr in that it does NOT delete the pointed element on destruction.
@@ -172,3 +173,5 @@ using c_str = owned_ptr<char[]>;
 
 template <sz_t N>
 using bounded_c_str = owned_ptr<char[N]>;
+
+}

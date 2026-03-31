@@ -1,164 +1,168 @@
+#pragma once
+#include "typedefs.hpp"
 #include <cstddef>
 #include <limits>
 #include <stdexcept>
 #include <string>
 
-namespace edenlib {
-template <size_t N> struct Bitset;
+namespace eden {
 
-template <size_t N>
-constexpr Bitset<N> operator&(const Bitset<N> &lhs,
-                              const Bitset<N> &rhs) noexcept {
-  Bitset<N> ret_set;
-  for (auto i{0uz}; i < Bitset<N>::num_data; ++i)
-    ret_set.bits[i] = lhs.bits[i] & rhs.bits[i];
-
-  return ret_set;
-}
-
-template <size_t N>
-constexpr Bitset<N> operator|(const Bitset<N> &lhs,
-                              const Bitset<N> &rhs) noexcept {
-  Bitset<N> ret_set;
-  for (auto i{0uz}; i < Bitset<N>::num_data; ++i)
-    ret_set.bits[i] = lhs.bits[i] | rhs.bits[i];
-
-  return ret_set;
-}
-
-template <size_t N>
-constexpr Bitset<N> operator^(const Bitset<N> &lhs,
-                              const Bitset<N> &rhs) noexcept {
-  Bitset<N> ret_set;
-  for (auto i{0uz}; i < Bitset<N>::num_data; ++i)
-    ret_set.bits[i] = lhs.bits[i] ^ rhs.bits[i];
-
-  return ret_set;
-}
-
-/* To Do:
- *  Add bitshift functionality
- *  Add bit-reference
- */
-template <size_t N> struct Bitset {
-
-  using data_type = unsigned long long;
-
-  static constexpr size_t sizeofType = sizeof(data_type);
-  static constexpr size_t num_data = (N - 1) / sizeofType + 1;
+template <sz_t N>
+class Bitset {
+  using data_type = u64_t;
+  static constexpr sz_t sizeofType = sizeof(data_type);
+  static constexpr sz_t num_data = (N - 1) / sizeofType + 1;
   static constexpr data_type maxofType = std::numeric_limits<data_type>::max();
-  static constexpr size_t indexOf(size_t pos) noexcept {
-    return pos / sizeofType;
-  }
-  static constexpr size_t size() noexcept { return N; }
 
-  static constexpr data_type maskFor(size_t pos) noexcept {
-    return 1ull << (pos % sizeofType);
-  }
+  [[nodiscard]] static constexpr sz_t
+  indexOf(sz_t pos) noexcept
+  {return pos / sizeofType;}
 
-  constexpr bool operator[](size_t pos) const { return test(pos); }
+  [[nodiscard]] static constexpr data_type
+  maskFor(sz_t pos) noexcept
+  {return 1ull << (pos % sizeofType);}
 
   data_type bits[num_data];
+public:
 
-  constexpr bool test(size_t pos) const {
+  constexpr Bitset() noexcept
+  {std::memset(bits, 0, num_data * sizeofType);}
+
+  explicit constexpr Bitset(const std::string& binary_string) noexcept
+  : Bitset() {
+    auto sz = binary_string.size();
+    for (auto i{0uz}; i < N; ++i) {
+      if (--sz == 0)
+        return;
+      const bool bit = (binary_string[sz] == '1');
+      set(i, bit);
+    }
+  }
+
+  constexpr Bitset(const Bitset &other) noexcept
+  {std::memcpy(bits, other.bits, num_data * sizeofType);}
+
+  [[nodiscard]] static constexpr sz_t
+  size() noexcept
+  {return N;}
+
+  [[nodiscard]] constexpr bool
+  operator[](sz_t pos) const noexcept
+  {return test(pos);}
+
+  [[nodiscard]] constexpr bool
+  test(sz_t pos) const {
     if (indexOf(pos) > (num_data - 1))
-      throw std::runtime_error("Invalid pos for bitset");
-
+      throw std::out_of_range(std::format("Element access at position {} in eden::bitset with size of {}.", pos, N));
     return bits[indexOf(pos)] & maskFor(pos);
   }
 
-  constexpr bool all() const {
-
+  [[nodiscard]] constexpr bool
+  all() const noexcept {
     for (auto i{0uz}; i < N; ++i) {
-      if (!test(i))
+      if (not test(i))
         return false;
     }
-
     return true;
   }
 
-  constexpr bool any() const {
+  [[nodiscard]] constexpr bool
+  any() const noexcept {
     for (auto i{0uz}; i < N; ++i) {
       if (test(i))
         return true;
     }
-
     return false;
   }
 
-  constexpr bool none() const { return !all(); }
+  [[nodiscard]] constexpr bool
+  none() const noexcept
+  {return not any();}
 
-  constexpr size_t count() const {
-    size_t num_true{};
+  [[nodiscard]] constexpr sz_t
+  count() const noexcept {
+    sz_t num_true{};
     for (auto i{0uz}; i < N; ++i) {
       if (test(i))
         ++num_true;
     }
-
     return num_true;
   }
 
-  friend constexpr Bitset operator&
-      <>(const Bitset &lhs, const Bitset &rhs) noexcept;
-  friend constexpr Bitset operator|
-      <>(const Bitset &lhs, const Bitset &rhs) noexcept;
-  friend constexpr Bitset operator^
-      <>(const Bitset &lhs, const Bitset &rhs) noexcept;
-
-  constexpr Bitset &operator&=(const Bitset &other) noexcept {
-    *this = *this & other;
-    return *this;
+  friend constexpr Bitset operator bitand(const Bitset &lhs, const Bitset &rhs) noexcept {
+    Bitset ret_set;
+    for (auto i{0uz}; i < num_data; ++i)
+      ret_set.bits[i] = lhs.bits[i] bitand rhs.bits[i];
+    return ret_set;
   }
 
-  constexpr Bitset &operator|=(const Bitset &other) noexcept {
-    *this = *this | other;
-    return *this;
+  friend constexpr Bitset operator bitor(const Bitset &lhs, const Bitset &rhs) noexcept {
+    Bitset ret_set;
+    for (auto i{0uz}; i < num_data; ++i)
+      ret_set.bits[i] = lhs.bits[i] bitor rhs.bits[i];
+    return ret_set;
   }
 
-  constexpr Bitset &operator^=(const Bitset &other) noexcept {
-    *this = *this ^ other;
-    return *this;
+  friend constexpr Bitset operator xor(const Bitset &lhs, const Bitset &rhs) noexcept {
+    Bitset ret_set;
+    for (auto i{0uz}; i < num_data; ++i)
+      ret_set.bits[i] = lhs.bits[i] xor rhs.bits[i];
+    return ret_set;
   }
 
-  constexpr Bitset operator~() const noexcept {
+  constexpr Bitset&
+  operator and_eq(const Bitset &other) noexcept
+  {return *this = *this bitand other;}
+
+  constexpr Bitset&
+  operator or_eq(const Bitset &other) noexcept
+  {return *this = *this bitor other;}
+
+  constexpr Bitset&
+  operator xor_eq(const Bitset &other) noexcept
+  {return *this = *this xor other;}
+
+  [[nodiscard]] constexpr Bitset
+  operator~() const noexcept {
     Bitset ret_val = *this;
     ret_val.flip();
     return ret_val;
   }
 
-  constexpr Bitset &set() {
+  constexpr Bitset&
+  set() noexcept {
     for (auto &num : bits)
       num = maxofType;
-
     return *this;
   }
 
-  constexpr Bitset &set(size_t pos, bool value = true) {
+  constexpr Bitset&
+  set(sz_t pos, bool value = true) noexcept {
     if (value)
-      bits[indexOf(pos)] |= maskFor(pos);
+      bits[indexOf(pos)] or_eq maskFor(pos);
     else
-      bits[indexOf(pos)] &= (~maskFor(pos));
-
+      bits[indexOf(pos)] and_eq ~maskFor(pos);
     return *this;
   }
 
-  constexpr Bitset &flip() noexcept {
+  constexpr Bitset&
+  flip() noexcept {
     for (auto i{0uz}; i < N; ++i)
-      set(i, !test(i));
-
+      set(i, not test(i));
     return *this;
   }
 
-  constexpr Bitset &flip(size_t pos) {
-    set(pos, !test(pos));
-    return *this;
-  }
+  constexpr Bitset&
+  flip(sz_t pos) noexcept
+  {return set(pos, not test(pos));}
 
-  constexpr std::string to_string() {
+  [[nodiscard]] constexpr std::string
+  to_string() const noexcept {
     std::string ret_val;
+    ret_val.reserve(N);
 
-    // technically doesn't work if you want >9 quintibytes of data
-    for (int i{N - 1}; i >= 0; --i) {
+    //technically doesn't work if you want >9 quintibytes of data
+    for (i64_t i{N - 1}; i >= 0; --i) {
       const char bit = test(i) ? '1' : '0';
       ret_val.push_back(bit);
     }
@@ -166,26 +170,6 @@ template <size_t N> struct Bitset {
     return ret_val;
   }
 
-  constexpr Bitset() noexcept {
-    for (auto &num : bits)
-      num = 0;
-  }
-
-  constexpr Bitset(std::string str) : Bitset() {
-    for (auto i{0uz}; i < N; ++i) {
-      if (str.empty())
-        return;
-
-      const bool bit = str.back() == '1' ? true : false;
-      set(i, bit);
-      str.pop_back();
-    }
-  }
-
-  constexpr Bitset(const Bitset &other) {
-    for (auto i{0uz}; i < num_data; ++i)
-      bits[i] = other.bits[num_data];
-  }
 };
 
-} // namespace edenlib
+}

@@ -1,10 +1,9 @@
 #pragma once
 #include "typedefs.hpp"
-#include <iostream>
 #include <memory>
 #include <new>
 
-namespace LOM {
+namespace eden {
 template <sz_t N = 4096uz>
 class Arena {
   void* curr;
