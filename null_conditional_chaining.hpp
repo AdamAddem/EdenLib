@@ -1,3 +1,4 @@
+#pragma once
 #include "concepts.hpp"
 
 namespace eden {
@@ -6,13 +7,10 @@ constexpr auto
 call_methods_conditionally(T ptr, First first, Remaining... rest) noexcept(
     noexcept(call_methods_conditionally(first(ptr), rest...)))
     -> decltype(call_methods_conditionally(first(ptr), rest...))
-  requires pointer_c<decltype(first(ptr))>
-{
+  requires pointer_c<decltype(first(ptr))> {
   if (ptr)
     return call_methods_conditionally(first(ptr), rest...);
-
-  if constexpr (pointer_c<decltype(call_methods_conditionally(first(ptr),
-                                                              rest...))>)
+  if constexpr (pointer_c<decltype(call_methods_conditionally(first(ptr), rest...))>)
     return nullptr;
 }
 
@@ -34,6 +32,6 @@ call_methods_conditionally(T ptr, Last last) noexcept(noexcept(last(ptr)))
       __VA_ARGS__))) { return (ptr->*&method_name)(__VA_ARGS__); }
 
 // use as such:
-// call_methods_conditionally(init_ptr, next_method(T::first, args),
-// next_method(B::second, args)... );
-} // namespace eden
+// call_methods_conditionally(init_ptr, next_method(T::first, args), next_method(B::second, args)... );
+
+}
