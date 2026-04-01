@@ -1,9 +1,12 @@
 #pragma once
+#include "concepts.hpp"
 #include "typedefs.hpp"
+
 #include <memory>
 #include <new>
 
 namespace eden {
+
 template <sz_t N = 4096uz>
 class Arena {
   void* curr;
@@ -20,7 +23,7 @@ public:
   }
 
   template <class T>
-  [[nodiscard]] T*
+  [[nodiscard]] constexpr T*
   allocate() noexcept {
     if (next_arena)
       return next_arena->allocate<T>();
@@ -36,6 +39,12 @@ public:
     return next_arena->allocate<T>();
   }
 
+  constexpr void
+  pop(sz_t bytes) noexcept {
+    curr = static_cast<char*>(curr) - bytes;
+    remaining += bytes;
+  }
+
   ~Arena() {
     if (curr == nullptr)
       return;
@@ -44,4 +53,26 @@ public:
   }
 
 };
+
+//if only user is false, deallocate will not do anything
+//if only user is true, deallocate will just bump the pointer down by n
+template <class T, sz_t N = 4096uz, bool OnlyUser = false>
+class ArenaAllocator {
+  Arena<N>* arena;
+public:
+  using value_type = T;
+
+  [[nodiscard]] T*
+  allocate(sz_t n) noexcept
+  {return arena->template allocate<T>(n);}
+
+  void deallocate([[maybe_unused]] T* p, sz_t n) noexcept
+  {if constexpr (OnlyUser) arena->pop(n * sizeof(T));}
+
+  [[nodiscard]] friend constexpr bool
+  operator==(const ArenaAllocator&, const ArenaAllocator&) = default;
+};
+
+static_assert(allocator_for_c<ArenaAllocator<int>, int>);
+
 }

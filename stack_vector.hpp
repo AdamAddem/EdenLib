@@ -12,7 +12,6 @@ namespace eden {
  * Ensure CV/Correctness
  * Examine possible UB with reinterpret_cast
  * Implement iterators
- */
 template <class T, std::size_t StackBufferSize, class Allocator = allocator<T>>
 class StackVector {
   using size_type = std::size_t;
@@ -132,7 +131,6 @@ class StackVector {
   }
 
 public:
-  /* Special Member Functions */
   explicit constexpr StackVector() noexcept(noexcept(Allocator()))
       : StackVector(Allocator()) {}
 
@@ -142,12 +140,10 @@ public:
     construct_buffers(count);
   }
 
-  constexpr StackVector(size_type count, const T &value,
-                        const Allocator &alloc = Allocator()) {
+  constexpr StackVector(size_type count, const T &value, const Allocator &alloc = Allocator()) {
     construct_buffers(count, value);
   }
-  StackVector(std::initializer_list<T> init,
-              const Allocator &alloc = Allocator());
+  StackVector(std::initializer_list<T> init, const Allocator &alloc = Allocator());
 
   constexpr StackVector(const StackVector &other) : m_alloc(other.m_alloc) {
     construct_buffers_copy(other.m_end + 1, other.m_stack_buffer,
@@ -195,9 +191,7 @@ public:
   }
 
   constexpr StackVector &operator=(std::initializer_list<T> ilist) noexcept;
-  /* Special Member Functions */
 
-  /* Element Access */
   [[nodiscard]] constexpr T &at(size_type pos) {
     if (pos > m_end)
       throw std::runtime_error("element access beyond bounds in stackvector");
@@ -260,9 +254,7 @@ public:
   [[nodiscard]] constexpr const T *heap_data() const noexcept {
     return m_begin_heap;
   }
-  /* Element Access */
 
-  /* Capacity */
   [[nodiscard]] constexpr bool is_empty() const noexcept { return m_end == 0; }
   [[nodiscard]] constexpr size_type size() const noexcept { return m_end; }
   [[nodiscard]] constexpr size_type capacity() const noexcept {
@@ -271,9 +263,7 @@ public:
 
     return StackBufferSize + (m_heap_capacity_end - m_begin_heap);
   }
-  /* Capacity */
 
-  /* Modifiers */
   constexpr void clear() noexcept {
     destroy_stack();
     destroy_heap();
@@ -375,7 +365,7 @@ public:
 
     std::cout << std::endl;
   }
-  /* Modifiers */
-};
+}
+*/
 
 } // namespace eden

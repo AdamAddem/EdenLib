@@ -17,8 +17,8 @@ call_methods_conditionally(T ptr, First first, Remaining... rest) noexcept(
 template <class T, class Last>
 constexpr auto
 call_methods_conditionally(T ptr, Last last) noexcept(noexcept(last(ptr)))
-    -> decltype(last(ptr))
-  requires pointer_c<decltype(last(ptr))> || void_c<decltype(last(ptr))>
+  -> decltype(last(ptr))
+  requires pointer_c<decltype(last(ptr))> or void_c<decltype(last(ptr))>
 {
   if (ptr)
     return last(ptr);

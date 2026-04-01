@@ -134,7 +134,17 @@ public:
       return internal == other;
   }
 
-  constexpr operator bool() const noexcept
+  [[nodiscard]] constexpr ref
+  operator[](sz_t idx) noexcept
+  requires is_array
+  {return internal[idx];}
+
+  [[nodiscard]] constexpr const_ref
+  operator[](sz_t idx) const noexcept
+  requires is_array
+  {return internal[idx];}
+
+  constexpr explicit operator bool() const noexcept
   {return internal not_eq nullptr;}
 
   [[nodiscard]] constexpr
