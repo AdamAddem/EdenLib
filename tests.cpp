@@ -35,7 +35,7 @@ void test_releasing_vector() {
     if (stdvec.capacity() not_eq edenvec.capacity())
       putstab("Failed: mismatching default capacities");
 
-    if (edenvec.release_raw() not_eq nullptr)
+    if (edenvec.release() not_eq nullptr)
       putstab("Failed: release on empty vector returns non-null");
 
     if (not ((std::span<u64_t>) edenvec).empty())
@@ -114,12 +114,10 @@ void test_releasing_vector() {
     if (*edenvec1.rbegin() not_eq edenvec1.back())
       putstab("Failed: last element not equal to reverse begin iterator.");
 
-    auto span1 = edenvec1.to_span();
-    auto cap1 = edenvec1.capacity();
-    auto data1 = edenvec1.release_raw();
-    auto cap2 = edenvec1.capacity();
-    auto data2 = edenvec2.release_owned();
-    auto data3 = edenvec3.release_handle();
+    const auto span1 = edenvec1.to_span();
+    auto data1 = edenvec1.release();
+    auto data2 = edenvec2.release();
+    auto data3 = edenvec3.release();
     for (auto i{0uz}; i<256; ++i) {
       if (data1[i] not_eq array_version[i]) {
         putstab("Failed: raw released data not equivalent to stack array.");
@@ -129,7 +127,7 @@ void test_releasing_vector() {
         putstab("Failed: owned_ptr released data not equivalent to stack array.");
         break;
       }
-      if (data3.raw_data[i] not_eq array_version[i]) {
+      if (data3[i] not_eq array_version[i]) {
         putstab("Failed: data_handle released data not equivalent to stack array.");
         break;
       }
@@ -147,8 +145,9 @@ void test_releasing_vector() {
       putstab("Failed: cleared vector does not report as empty.");
 
     std::allocator<u64_t> alloc;
-    releasing_vector<u64_t>::destroy_and_deallocate(data1, cap1, alloc);
-    releasing_vector<u64_t>::destroy_and_deallocate(data2.get(), cap2, alloc);
+    releasing_vector<u64_t>::destroy_and_deallocate(data1);
+    releasing_vector<u64_t>::destroy_and_deallocate(data2);
+    edenvec3.destroy_and_deallocate(data3);
   }
 
 }

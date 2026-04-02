@@ -1,10 +1,8 @@
 #pragma once
 #include "assume_assert.hpp"
 #include "concepts.hpp"
-#include "owned.hpp"
 #include "type_flags.hpp"
 #include "typedefs.hpp"
-#include <cstring>
 #include <format>
 #include <memory>
 #include <ranges>
@@ -12,53 +10,165 @@
 namespace eden {
 
 
+/*  idx 0      idx 1...
+ *  [sz, cap], [...]
+ *
+ *
+ */
 
-template <class T, allocator_for_c<T> Allocator = std::allocator<T>>
+ /*
+ *  InitialCapacity (default 0):
+ *    -The initial capacity for the vector, equivalent to calling .reserve() immediately after construction.
+ *  ExpansionMult (default 2):
+ *    -The multiplier applied to the capacity everytime the capacity fills.
+ *  StoreHeader (default true):
+ *    -Determines whether the vector allocates a pointer to a header before the data.
+ *    -If true, max(8, sizeof(T)) bytes extra are allocated and stored. Can be inefficient for small arrays and small types.
+ *    -If true, deallocation just requires the released pointer.
+ *    -If false, the user will be handed a header upon release that will need to be stored.
+ *  Allocator (default std::allocator<T>):
+ *    -The allocator for the specified type.
+ */
+template <class T,
+          u64_t InitialCapacity = 0,
+          u64_t ExpansionMult = 2,
+          bool StoreHeader = true,
+          allocator_for_c<T> Allocator = std::allocator<T>>
+requires (ExpansionMult > 1)
+struct releasing_vector_settings {
+  static constexpr u64_t initial_capacity = InitialCapacity;
+  static constexpr u64_t expansion_mult = ExpansionMult;
+  static constexpr bool store_header = StoreHeader;
+  using allocator = Allocator;
+};
+
+template<class T>
+using default_releasing_vector = releasing_vector_settings<T>;
+
+template<class T>
+using noheader_releasing_vector = releasing_vector_settings<T, 0, 2, false>;
+
+template<releasing_vector_settings first, releasing_vector_settings second>
+concept compatible_releasing_vector_settings =
+  std::is_same_v<typename decltype(first)::allocator, typename decltype(second)::allocator> and decltype(first)::store_header == decltype(second)::store_header;
+
+template <class T, releasing_vector_settings settings = default_releasing_vector<T>{}>
 class releasing_vector {
-  static constexpr sz_t expansion_mod = 2;
-  static constexpr sz_t first_allocation_size = 2;
+
+  static constexpr sz_t initial_capacity = decltype(settings)::initial_capacity;
+  static constexpr sz_t expansion_mult = decltype(settings)::expansion_mult;
+  static constexpr bool store_header = decltype(settings)::store_header;
+  using allocator = decltype(settings)::allocator;
+  static constexpr bool trivially_destructible = std::is_trivially_destructible_v<T>;
+
+  struct header {
+    [[no_unique_address]] allocator alloc;
+    sz_t info[trivially_destructible ? 1 : 2];
+
+    static constexpr u64_t size = 0;
+    static constexpr u64_t capacity = trivially_destructible ? 0 : 1;
+  };
+
+
+  static constexpr sz_t Tsz = sizeof(T);
+  static constexpr sz_t ptr_size = sizeof(void*);
+  static constexpr sz_t header_size = not store_header ? 0 : sizeof(header);
+
+  //The offset from the first T element, in terms of T. Zero if not storing a header.
+  //(Assuming a zero sized allocator and 8 byte pointer size)
+  //Ex: if T is u16_t, header_count is 4 (the pointer occupies the space of 4 u16's)
+  //    if T is u128_t, header_count is 1 (the vector has to allocate in multiples of T, Tsize is 16 and pointer is 8, so 8 bytes are wasted)
+  static constexpr sz_t header_count =
+    not store_header ? 0 : (
+    Tsz >= ptr_size ? 1 : (ptr_size + Tsz - 1) / Tsz);
 
   static constexpr bool is_string = same_c<T, char>;
   static constexpr bool nothrow_copy_construct = std::is_nothrow_copy_constructible_v<T>;
-  static constexpr bool trivially_destructible = std::is_trivially_destructible_v<T>;
 
-  [[no_unique_address]] Allocator m_alloc;
-  using alloc_traits = std::allocator_traits<Allocator>;
-  static constexpr bool stateless_allocator = std::allocator_traits<Allocator>::is_always_equal;
+  [[no_unique_address]] allocator m_alloc;
+  using alloc_traits = std::allocator_traits<allocator>;
+  static constexpr bool stateless_allocator = std::allocator_traits<allocator>::is_always_equal;
   static constexpr bool nothrow_destruct = noexcept(alloc_traits::destroy(m_alloc, static_cast<T*>(0)));
   static constexpr bool nothrow_allocating = noexcept(m_alloc.allocate(1));
   static constexpr bool nothrow_deallocating = noexcept(m_alloc.deallocate(static_cast<T*>(0), 1));
+
+
+  [[nodiscard]] static constexpr header*
+  get_header_pointer_from(T* data) noexcept
+  requires store_header {
+    assert(data);
+                         //https://wiki.c2.com/?ThreeStarProgrammer/
+    return *std::launder(reinterpret_cast<header**>(data - header_count));
+  }
+
+  [[nodiscard]] constexpr header*
+  header_pointer() const noexcept
+  requires store_header
+  {return get_header_pointer_from(m_begin);}
+
+  [[nodiscard]] static constexpr header**
+  get_header_ptr_location_from(T* data) noexcept
+  requires store_header {
+    assert(data);
+    return std::launder(reinterpret_cast<header**>(data - header_count));
+  }
+
+  [[nodiscard]] constexpr header**
+  header_pointer_location() const noexcept
+  requires store_header
+  {return get_header_ptr_location_from(m_begin);}
 
   T* m_begin{nullptr};
   T* m_size{nullptr};
   T* m_cap{nullptr};
 
+  constexpr void
+  construct_header() const noexcept
+  requires store_header {
+    if constexpr (trivially_destructible)
+      new (header_pointer()) header(alloc_traits::select_on_container_copy_construction(m_alloc), {capacity()});
+    else
+      new (header_pointer()) header(alloc_traits::select_on_container_copy_construction(m_alloc), {size(), capacity()});
+  }
+
+  constexpr void allocate(sz_t count)
+  noexcept(nothrow_allocating) {
+    assert(m_begin == nullptr);
+    assert(m_size == nullptr);
+    assert(m_cap == nullptr);
+
+    m_size = m_begin = m_alloc.allocate(count + header_count) + header_count;
+    m_cap = m_begin + count;
+  }
+
+  constexpr void first_allocation(sz_t count)
+  noexcept(nothrow_allocating) {
+    allocate(count);
+    if constexpr (store_header)
+      *header_pointer_location() = static_cast<header*>(::operator new(sizeof(header), static_cast<std::align_val_t>(alignof(header))));
+  }
+
   constexpr void deallocate()
   noexcept(nothrow_deallocating) {
     if (m_begin == nullptr)
       return;
-    m_alloc.deallocate(m_begin,  capacity());
+    m_alloc.deallocate(m_begin - header_count,  capacity() + header_count);
     m_cap = m_size = m_begin = nullptr;
   }
 
   constexpr void destroy()
-  noexcept(std::is_nothrow_destructible_v<T>) {
+  noexcept(nothrow_destruct) {
     if (m_begin == nullptr)
       return;
-    if constexpr (trivially_destructible) {
-      m_size = m_begin;
-      return;
-    }
-
-    while (m_size-- not_eq m_begin)
-      alloc_traits::destroy(m_alloc, m_size);
+    while (m_size not_eq m_begin)
+      alloc_traits::destroy(m_alloc, --m_size);
   }
 
   template <class ...Args>
   constexpr void allocate_and_construct(sz_t count, Args&&... args)
   noexcept(std::is_nothrow_constructible_v<T, Args...>)
   requires std::is_constructible_v<T, Args...> {
-    m_cap = (m_size = m_begin = m_alloc.allocate(count)) + count;
+    first_allocation(count);
     while (m_size not_eq m_cap)
       alloc_traits::construct(m_alloc, m_size++, std::forward<Args>(args)...);
   }
@@ -66,12 +176,15 @@ class releasing_vector {
   constexpr void expand_to(sz_t count)
   noexcept(std::is_nothrow_copy_constructible_v<T>) {
     assert(count >= size());
-    T* new_buff = m_alloc.allocate(count);
+    T* new_buff = m_alloc.allocate(count + header_count) + header_count;
     auto i{0uz};
     while ((m_begin + i) not_eq m_size) {
       alloc_traits::construct(m_alloc, new_buff + i, std::move_if_noexcept(*(m_begin + i)));
       ++i;
     }
+    if constexpr (store_header)
+      *std::launder(reinterpret_cast<void**>(new_buff - header_count)) = header_pointer();
+
     destroy(); deallocate();
     m_begin = new_buff;
     m_size = m_begin + i;
@@ -241,75 +354,44 @@ public:
   using const_reverse_iterator = std::reverse_iterator<const_iterator>;
   using reverse_iterator = std::reverse_iterator<iterator>;
 
-  static constexpr void
-  destroy_using(T* data, sz_t size, Allocator& alloc) noexcept {
-    while (size-- not_eq 0)
-      alloc_traits::destroy(alloc, data + size);
-  }
+  class data_handle {
+    friend class releasing_vector;
 
-  static constexpr void
-  deallocate_using(T* data, sz_t capacity, Allocator& alloc) noexcept
-  {alloc.deallocate(data, capacity);}
+    [[no_unique_address]] allocator alloc;
+    sz_t info[trivially_destructible ? 1 : 2];
+    static constexpr u64_t size = 0;
+    static constexpr u64_t capacity = trivially_destructible ? 0 : 1;
+  public:
+    owned_ptr<T> data;
 
-  static constexpr void
-  destroy_and_deallocate(T* data, sz_t size, sz_t capacity, Allocator& alloc)
-  noexcept(nothrow_deallocating and nothrow_destruct)
-  requires (not trivially_destructible) {
-    destroy_using(data, size, alloc);
-    deallocate_using(data, capacity, alloc);
-  }
+    constexpr ~data_handle() {
+      if (data == nullptr)
+        return;
 
-  static constexpr void
-  destroy_and_deallocate(T* data, sz_t capacity, Allocator& alloc)
-  noexcept(nothrow_deallocating and nothrow_destruct)
-  requires trivially_destructible
-  {deallocate_using(data, capacity, alloc);}
-
-  struct data_handle {
-    [[no_unique_address]]
-    Allocator allocator;
-
-    owned_ptr<T[]> raw_data;
-    sz_t size;
-    sz_t capacity;
-
-    constexpr data_handle(const Allocator& allocator, owned_ptr<T[]> raw_data, sz_t size, sz_t capacity) noexcept
-    :allocator(alloc_traits::select_on_container_copy_construction(allocator)), raw_data(std::move(raw_data)), size(size), capacity(capacity)
-    {}
-
-    data_handle(const data_handle&) = delete;
-    constexpr data_handle(data_handle&& other) noexcept
-    :allocator(alloc_traits::select_on_container_copy_construction(other.allocator)),
-      raw_data(std::move(other.raw_data)),
-      size(other.size),
-      capacity(other.capacity) {}
-
-    constexpr void
-    destroy_and_deallocate()
-    noexcept(nothrow_deallocating and nothrow_destruct) {
-      if constexpr (not trivially_destructible)
-        destroy_using(raw_data.get(), size, allocator);
-      deallocate_using(raw_data.release(), capacity, allocator);
+      if constexpr (not trivially_destructible) {
+        sz_t& sz = info[size];
+        while (sz not_eq 0)
+          alloc_traits::destroy(alloc, data + --sz);
+      }
+      sz_t& cap = info[capacity];
+      alloc.deallocate(data, cap);
     }
-
-    constexpr ~data_handle() {destroy_and_deallocate();}
   };
 
-  constexpr releasing_vector() = default;
-  explicit constexpr releasing_vector(const Allocator &alloc) noexcept
+  constexpr releasing_vector()
+  noexcept(nothrow_allocating) {
+    if constexpr (initial_capacity > 0)
+      first_allocation(initial_capacity);
+  }
+
+  explicit constexpr releasing_vector(const allocator &alloc) noexcept
   : m_alloc(alloc_traits::select_on_container_copy_construction(alloc)) {}
 
-  template <sz_t N>
-  explicit constexpr releasing_vector(reserve_initial_def<N>)
-  noexcept(nothrow_allocating)
-  : m_begin(m_alloc.allocate(N))
-  {m_size = m_begin; m_cap = m_begin + N;}
-
-  explicit releasing_vector(sz_t count, const Allocator &alloc = Allocator()) noexcept
+  explicit releasing_vector(sz_t count, const allocator &alloc = allocator()) noexcept
   : m_alloc(alloc_traits::select_on_container_copy_construction(alloc))
   {allocate_and_construct(count);}
 
-  constexpr releasing_vector(sz_t count, const T &value, const Allocator &alloc = Allocator())
+  constexpr releasing_vector(sz_t count, const T &value, const allocator &alloc = allocator())
   noexcept(nothrow_copy_construct)
   requires std::is_copy_constructible_v<T>
   : m_alloc(alloc_traits::select_on_container_copy_construction(alloc))
@@ -318,38 +400,15 @@ public:
   constexpr releasing_vector(const releasing_vector &other) = delete;
   constexpr releasing_vector& operator=(const releasing_vector &other) = delete;
 
-  explicit constexpr releasing_vector(const char* const terminated_string)
-  noexcept(nothrow_allocating)
-  requires is_string {
-    const sz_t sz = std::strlen(terminated_string) + 1;
-    m_size = m_begin = m_alloc.allocate(sz);
-    m_cap = m_begin + sz;
-    sz_t i{1};
-    char c = terminated_string[0];
-    while (c not_eq '\0') {
-      *(m_size++) = c;
-      c = terminated_string[i++];
-    }
-  }
-
-  explicit constexpr releasing_vector(data_handle handle) noexcept
-  : m_alloc(alloc_traits::select_on_container_copy_construction(handle.allocator)), m_begin(handle.raw_data.release()) {
-    m_size = m_begin + handle.sz;
-    m_cap = m_begin + handle.capacity;
-  }
-
-  template <sz_t N>
-  explicit constexpr releasing_vector(owned_ptr<T[N]> allocated_data, const Allocator& data_allocator) noexcept
-  : m_alloc(alloc_traits::select_on_container_copy_construction(data_allocator)) {
-    m_begin = allocated_data.release();
-    m_cap = m_size = (m_begin + N);
-  }
-
-  constexpr releasing_vector(releasing_vector &&other) noexcept
+  template <releasing_vector_settings other_settings>
+  requires compatible_releasing_vector_settings<settings, other_settings>
+  constexpr releasing_vector(releasing_vector<T, other_settings> &&other) noexcept
   : m_alloc(alloc_traits::select_on_container_copy_construction(other.m_alloc)), m_begin(other.m_begin), m_size(other.m_size), m_cap(other.m_cap)
   {other.m_begin = other.m_size = other.m_cap = nullptr;}
 
-  constexpr void swap(releasing_vector& other) noexcept {
+  template <releasing_vector_settings other_settings>
+  requires compatible_releasing_vector_settings<settings, other_settings>
+  constexpr void swap(releasing_vector<T, other_settings>& other) noexcept {
     std::swap(m_alloc, other.m_alloc);
     std::swap(m_begin, other.m_begin); std::swap(m_size, other.m_size);
     std::swap(m_cap, other.m_cap); std::swap(m_alloc, other.m_alloc);
@@ -359,8 +418,10 @@ public:
   noexcept(noexcept(destroy()) and noexcept(deallocate()))
   {destroy(); deallocate();}
 
+  template <releasing_vector_settings other_settings>
+  requires compatible_releasing_vector_settings<settings, other_settings>
   constexpr releasing_vector&
-  operator=(releasing_vector &&other) noexcept {
+  operator=(releasing_vector<T, other_settings> &&other) noexcept {
     destroy(); deallocate();
     m_alloc = alloc_traits::select_on_container_copy_construction(other.m_alloc);
     m_begin = other.m_begin; m_size = other.m_size; m_cap = other.m_cap;
@@ -458,50 +519,64 @@ public:
   data() const noexcept
   {return m_begin;}
 
-  [[nodiscard]] constexpr data_handle
-  release_handle() noexcept {
-    if constexpr (is_string) {
-      if (m_size == m_cap)
-        expand_to(capacity() + 1);
-      push_back('\0');
-    }
-
-    data_handle handle{
-      m_alloc,
-      owned_ptr<T[]>(m_begin),
-      size(),
-      capacity()};
-    m_cap = m_size = m_begin = nullptr;
-    return handle;
-  }
-
-  [[deprecated("Do not use this unless you know what you are doing. Use releasing_vector::destroy_and_deallocate to properly free the data.")]]
-  [[nodiscard]] constexpr owned_ptr<T[]>
-  release_owned() noexcept {
-    if constexpr (is_string) {
-      if (m_size == m_cap)
-        expand_to(capacity() + 1);
-      push_back('\0');
-    }
-
-    auto data = m_begin;
-    m_cap = m_size = m_begin = nullptr;
-    return owned_ptr<T[]>(data);
-  }
-
-  [[deprecated("Do not use this unless you know what you are doing. Use releasing_vector::destroy_and_deallocate to properly free the data.")]]
   [[nodiscard]] constexpr T*
-  release_raw() noexcept {
-    if constexpr (is_string) {
-      if (m_size == m_cap)
-        expand_to(capacity() + 1);
-      push_back('\0');
-    }
-
-    auto data = m_begin;
+  release() noexcept
+  requires store_header {
+    if (m_begin == nullptr)
+      return nullptr;
+    T* data = m_begin;
+    construct_header();
     m_cap = m_size = m_begin = nullptr;
     return data;
   }
+
+  [[nodiscard]] constexpr data_handle
+  release() noexcept
+  requires (not store_header) {
+    if (m_begin == nullptr)
+      return {alloc_traits::select_on_container_copy_construction(m_alloc), {0,0}, nullptr};
+    T* data = m_begin;
+
+    sz_t sz;
+    sz_t cap = capacity();
+    m_cap = m_size = m_begin = nullptr;
+
+    if constexpr(not trivially_destructible) {
+      sz = size();
+      return {alloc_traits::select_on_container_copy_construction(m_alloc), {sz, cap}, data};
+    } else {
+      return {alloc_traits::select_on_container_copy_construction(m_alloc), {cap}, data};
+    }
+  }
+
+  static constexpr void
+  destroy_and_deallocate(T* data)
+  noexcept(nothrow_deallocating and nothrow_destruct)
+  requires store_header {
+    if (data == nullptr)
+      return;
+
+    auto header_ptr = get_header_pointer_from(data);
+    auto& alloc = header_ptr->alloc;
+    if constexpr (not trivially_destructible) {
+      sz_t size = header_ptr->info[header::size];
+      while (size not_eq 0)
+        alloc_traits::destroy(alloc, data + --size);
+    }
+    const sz_t cap = header_ptr->info[header::capacity];
+    alloc.deallocate(data - header_count, cap + header_count);
+
+    std::destroy_at(header_ptr);
+    ::operator delete(header_ptr, static_cast<std::align_val_t>(alignof(header)));
+  }
+
+  [[nodiscard]] constexpr explicit
+  operator std::span<T>() const noexcept
+  {return std::span(m_begin, size());}
+
+  [[nodiscard]] constexpr std::span<T>
+  to_span() const noexcept
+  {return static_cast<std::span<T>>(*this);}
 
   [[nodiscard]] constexpr explicit
   operator std::string_view() const noexcept
@@ -514,14 +589,6 @@ public:
   {return static_cast<std::string_view>(*this);}
 
   [[nodiscard]] constexpr explicit
-  operator std::span<T>() const noexcept
-  {return std::span(m_begin, size());}
-
-  [[nodiscard]] constexpr std::span<T>
-  to_span() const noexcept
-  {return static_cast<std::span<T>>(*this);}
-
-  [[nodiscard]] constexpr explicit
   operator std::string() const noexcept
   requires is_string
   {return std::string(m_begin, size());}
@@ -532,23 +599,6 @@ public:
   {return static_cast<std::string>(*this);}
 
   [[nodiscard]] constexpr bool
-  operator==(const char* terminated_string) noexcept
-  requires is_string {
-    if (empty())
-      return terminated_string[0] == '\0';
-    sz_t i{};
-    while (m_begin + i not_eq m_size) {
-      const char c = terminated_string[i];
-      if (c == '\0')
-        return *(m_begin + i) == '\0';
-      if (*(m_begin + i) not_eq c)
-        return false;
-      ++i;
-    }
-    return terminated_string[i] == '\0';
-  }
-
-  [[nodiscard]] constexpr bool
   empty() const noexcept
   {return m_size == m_begin;}
 
@@ -556,11 +606,18 @@ public:
   size() const noexcept
   {return m_size - m_begin;}
 
-  constexpr void reserve(sz_t new_capacity) const noexcept
-  {if (capacity() < new_capacity) expand_to(new_capacity);}
+  constexpr void reserve(sz_t new_capacity) const noexcept {
+    if (m_begin == nullptr)
+      first_allocation(new_capacity);
+    else if (capacity() < new_capacity)
+      expand_to(new_capacity);
+  }
 
   constexpr void resize(sz_t count) noexcept
   requires std::is_default_constructible_v<T> {
+    if (m_begin == nullptr)
+      return allocate_and_construct(count);
+
     const sz_t current_size = size();
     if (current_size == count)
       return;
@@ -578,6 +635,9 @@ public:
 
   constexpr void resize(sz_t count, const T& value) noexcept
   requires std::is_copy_constructible_v<T> {
+    if (m_begin == nullptr)
+      return allocate_and_construct(count, value);
+
     const sz_t current_size = size();
     if (current_size == count)
       return;
@@ -602,18 +662,17 @@ public:
       expand_to(size());
   }
 
-  constexpr void clear() noexcept {destroy();}
+  constexpr void clear() noexcept
+  {destroy();}
 
   template <class... Args> constexpr T&
   emplace_back(Args&&... args)
   noexcept(std::is_nothrow_constructible_v<T, Args...>)
   requires std::is_constructible_v<T, Args...> {
-    if (m_begin == nullptr) {
-      m_size = m_begin = m_alloc.allocate(first_allocation_size);
-      m_cap = m_begin + first_allocation_size;
-    }
+    if (m_begin == nullptr)
+      first_allocation(1);
     else if (m_size == m_cap)
-      expand_to(capacity() * expansion_mod);
+      expand_to(capacity() * expansion_mult);
 
     alloc_traits::construct(m_alloc, m_size, std::forward<Args>(args)...);
     return *(m_size++);
@@ -635,15 +694,19 @@ public:
 
 using releasing_string = releasing_vector<char>;
 
-template <class T, class Allocator>
+
+
+template <class T, releasing_vector_settings a_settings, releasing_vector_settings b_settings>
+requires compatible_releasing_vector_settings<a_settings, b_settings>
 constexpr void
-swap(releasing_vector<T, Allocator>& a, releasing_vector<T, Allocator>& b) noexcept
+swap(releasing_vector<T, a_settings>& a, releasing_vector<T, b_settings>& b) noexcept
 {a.swap(b);}
 
-template <class T, class Allocator>
+template <class T, releasing_vector_settings lhs_settings, releasing_vector_settings rhs_settings>
+requires compatible_releasing_vector_settings<lhs_settings, rhs_settings>
 [[nodiscard]] constexpr bool
-operator==(const releasing_vector<T, Allocator>& lhs, const releasing_vector<T, Allocator>& rhs) noexcept
-requires requires (T a, T b) {a == b;} {
+operator==(const releasing_vector<T, lhs_settings>& lhs, const releasing_vector<T, rhs_settings>& rhs) noexcept
+requires std::equality_comparable<T> {
   const auto sz = lhs.size();
   if (sz not_eq rhs.size())
     return false;
