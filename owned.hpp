@@ -61,6 +61,8 @@ class owned_ptr {
 
 public:
   constexpr owned_ptr() noexcept = default;
+  constexpr explicit owned_ptr(decltype(nullptr)) noexcept {}
+
   constexpr explicit owned_ptr(ptr mine_now) noexcept
   : internal(mine_now) {}
 
@@ -144,11 +146,12 @@ public:
   requires is_array
   {return internal[idx];}
 
-  constexpr explicit operator bool() const noexcept
+  constexpr explicit
+  operator bool() const noexcept
   {return internal not_eq nullptr;}
 
-  [[nodiscard]] constexpr
-  explicit operator std::span<value_type, array_size>() noexcept
+  [[nodiscard]] constexpr explicit
+  operator std::span<value_type, array_size>() noexcept
   requires bounded_array
   {return std::span<value_type, array_size>(internal);}
 
@@ -157,8 +160,8 @@ public:
   requires is_array
   {return std::span(internal, length);}
 
-  [[nodiscard]] constexpr
-  explicit operator std::string_view() const noexcept
+  [[nodiscard]] constexpr explicit
+  operator std::string_view() const noexcept
   requires is_string {
     if constexpr (bounded_array)
       return std::string_view(internal, array_size);
@@ -166,8 +169,8 @@ public:
       return std::string_view(internal);
   }
 
-  [[nodiscard]] constexpr
-  explicit operator std::string() const noexcept
+  [[nodiscard]] constexpr explicit
+  operator std::string() const noexcept
   requires is_string {
     if constexpr (bounded_array)
       return std::string(internal, array_size);

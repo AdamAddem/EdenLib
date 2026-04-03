@@ -1,8 +1,12 @@
 #pragma once
 #include "typedefs.hpp"
-#include <type_traits>
+
+#include <algorithm>
+#include <array>
 #include <concepts>
+#include <cstring>
 #include <memory>
+#include <type_traits>
 
 namespace eden {
 
@@ -20,9 +24,27 @@ concept allocator_for_c = requires (Alloc a, T* p, std::size_t n) {
   Alloc(a);
 };
 
-template <class T>
+template<sz_t N>
+struct TemplateString {
+  std::array<char, N> data;
+  consteval TemplateString(const char (&str)[N]) {
+    std::copy_n(str, N, data.begin());
+  }
+
+  static consteval sz_t size() noexcept {return N;}
+};
+
+
+template<>
+struct TemplateString<0> {
+  std::array<char, 1> data{'\0'};
+  static consteval sz_t size() noexcept {return 1;}
+};
+
+template <class T, TemplateString name = TemplateString<0>{}>
 struct type {
   /* Traits */ #define trait static constexpr bool
+  template <class U> trait is = std::same_as<T, U>;
   trait is_void = std::is_void_v<T>;
   trait is_nullptr = std::is_null_pointer_v<T>;
   trait is_integral = std::is_integral_v<T>;
@@ -158,17 +180,14 @@ public:
   /* Type Transformations */
 
   /* Utilities */
-  static constexpr std::string type_name = T::type_name;
+  static constexpr const char* type_name = name.data.data();
   /* Utilities */
+
+
 };
-
-struct Test : type<Test> {
-  static constexpr std::string type_name = "Test";
-};
-
-
 
 template <class T> concept pointer_c = std::is_pointer_v<T>;
+template <class T> concept enum_c = std::is_enum_v<T>;
 template <class T> concept void_c = std::is_void_v<T>;
 template <class T, class U> concept same_c = std::is_same_v<T, U>;
 template <class T, class U> concept different_c = not std::is_same_v<T, U>;
