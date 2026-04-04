@@ -41,7 +41,7 @@ struct TemplateString<0> {
   static consteval sz_t size() noexcept {return 1;}
 };
 
-template <class T, TemplateString name = TemplateString<0>{}>
+template <class T, TemplateString name_str = TemplateString<0>{}>
 struct type {
   /* Traits */ #define trait static constexpr bool
   template <class U> trait is = std::same_as<T, U>;
@@ -130,7 +130,7 @@ struct type {
   property num_dimensions = std::rank_v<T>; property rank = num_dimensions;
   property first_dimension_size = std::extent_v<T, 0>;
   property last_dimension_size = std::extent_v<T, u32_t(num_dimensions) - 1>;
-  template<sz_t N> property nth_dimension_size = std::extent_v<T, N - 1>;
+  template<sz_t N> property dimension_size = std::extent_v<T, N>;
   /* Properties */ #undef property
 
   /* Type Transformations */
@@ -156,6 +156,11 @@ struct type {
   using pointed_type = no_ptr;
   using as_ptr = std::add_pointer_t<T>;
 
+  template <sz_t N>
+  using as_bounded_array = T[N];
+  using as_array = T[];
+
+
 private:
   template<typename K> struct opposite_sign_helper_struct{using type = K;};
   template<std::signed_integral K> struct opposite_sign_helper_struct<K> {using type = type<K>::as_unsigned;};
@@ -166,7 +171,12 @@ private:
 public:
   using as_signed = sign_helper_struct<T>::as_signed;
   using as_unsigned = sign_helper_struct<T>::as_unsigned;
-  using opposite_sign = opposite_sign_helper_struct<T>::type;
+  using opposite_sign = opposite_sign_helper_struct<T>::tstruct Example : type<Example> { int x; };
+inline Example::no_volatile::as_bounded_array<5> x;
+
+consteval void test() {
+  x[0].x = 2;
+}ype;
 
   using as_decayed = std::decay_t<T>;
 
@@ -180,10 +190,8 @@ public:
   /* Type Transformations */
 
   /* Utilities */
-  static constexpr const char* type_name = name.data.data();
+  static constexpr const char* name = name_str.data.data();
   /* Utilities */
-
-
 };
 
 template <class T> concept pointer_c = std::is_pointer_v<T>;

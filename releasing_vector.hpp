@@ -642,6 +642,7 @@ public:
         return false;
       ++i;
     }
+    assert(c_str[N-1] == '\0' and "Pass a terminated string to this function, doofus");
     return true;
   }
 

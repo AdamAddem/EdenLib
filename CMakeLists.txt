@@ -11,11 +11,9 @@ add_executable(Eden
         arena.hpp
         assume_assert.hpp
         concepts.hpp
-        memory.hpp
         null_conditional_chaining.hpp
         owned.hpp
         releasing_vector.hpp
-        stack_vector.hpp
         type_flags.hpp
         typedefs.hpp
         eden_all.hpp

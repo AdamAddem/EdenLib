@@ -34,7 +34,7 @@ namespace eden {
  *  -operator bool; //returns true if the internal pointer is not null
  *
  * T[] Additions / Modifications:
- *  -If the array type has a specified size:
+ *  -If the array type has a bound:
  *    -operator std::span() const; //returns static span of array size
  *    -operator==(const owned_ptr&) const;  //if T is equality comparable, returns true if all elements are equal. otherwise, just compares pointers.
  *  -std::span<T> to_dynamic_span(sz_t length) const; //returns dynamic span with specified length
@@ -176,6 +176,15 @@ public:
       return std::string(internal, array_size);
     else
       return std::string(internal);
+  }
+
+  [[nodiscard]] constexpr sz_t
+  length() const noexcept
+  requires is_string {
+    if constexpr (bounded_array)
+      return array_size;
+    else
+      return std::strlen(internal);
   }
 };
 

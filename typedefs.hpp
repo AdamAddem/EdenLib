@@ -10,10 +10,8 @@ using i32_t = std::int32_t;
 using u32_t = std::uint32_t;
 using i64_t = std::int64_t;
 using u64_t = std::uint64_t;
-using f32_t = float;
-static_assert(sizeof(float) == 4);
-using f64_t = double;
-static_assert(sizeof(double) == 8);
+using f32_t = float; static_assert(sizeof(float) == 4);
+using f64_t = double; static_assert(sizeof(double) == 8);
 
 using sz_t = std::size_t;
 using iptr_t = std::intptr_t;
