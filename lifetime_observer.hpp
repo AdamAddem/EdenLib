@@ -8,8 +8,8 @@ namespace eden {
 
   template<sz_t N>
   struct LifetimeObserver {
-    inline static std::string lifetime_log;
-    inline static sz_t idgen{0};
+    inline static constinit std::string lifetime_log;
+    inline static constinit sz_t idgen{0};
 
     LifetimeObserver() : id(idgen++)
     {lifetime_log.append(std::format("{} Default Constructed\n", id));}
@@ -31,6 +31,7 @@ namespace eden {
 
   private:
     sz_t id;
+    static constexpr sz_t n = N;
   };
 
 
