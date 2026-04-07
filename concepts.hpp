@@ -171,12 +171,7 @@ private:
 public:
   using as_signed = sign_helper_struct<T>::as_signed;
   using as_unsigned = sign_helper_struct<T>::as_unsigned;
-  using opposite_sign = opposite_sign_helper_struct<T>::tstruct Example : type<Example> { int x; };
-inline Example::no_volatile::as_bounded_array<5> x;
-
-consteval void test() {
-  x[0].x = 2;
-}ype;
+  using opposite_sign = opposite_sign_helper_struct<T>::type;
 
   using as_decayed = std::decay_t<T>;
 

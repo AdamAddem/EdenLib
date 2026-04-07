@@ -42,7 +42,7 @@ void test_releasing_vector() {
     EXPECT(edenvec.release() == nullptr, "Failed: release on empty vector returns non-null");
     EXPECT(((std::span<u64_t>) edenvec).empty(), "Failed: span created from empty vector not empty");
 
-    const releasing_vector<u64_t> empty_other;
+    constexpr releasing_vector<u64_t> empty_other;
     EXPECT(edenvec == empty_other, "Failed: empty vectors compare differently");
     EXPECT(edenvec == edenvec, "Failed: empty vector compares not equal to itself");
 

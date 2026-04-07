@@ -1,4 +1,5 @@
 #pragma once
+#include "typedefs.hpp"
 #include <cstring>
 #include <span>
 
@@ -9,12 +10,12 @@ namespace eden {
  *     -Note: reset also does NOT delete the element.
  *
  *  -This is possibly useful in some edge cases:
- *     -unique_ptr requires the type be complete, so simple methods that could be inlined and done at compile time
+ *     -unique_ptr requires the type be complete, so simple methods that could be inlined and done at compile time.
  *      have to be defined in a cpp file rather than the header. owned_ptr does not prevent this.
  *
- *  -Most methods are constexpr and noexcept
- *  -Array types have some differences and additions listed in the API section
- *  -c_str is offered as a char[] specialization and offers some extra changes for c-strings
+ *  -Most methods are constexpr and noexcept.
+ *  -Array types have some differences and additions listed in the API section.
+ *  -c_str is offered as a char[] specialization and offers some extra changes for c-strings.
  *
  * Methods:
  *  -owned_ptr(); //constructs w/ nullptr
@@ -30,7 +31,7 @@ namespace eden {
  *
  *  -operator*, ->; //does what you think
  *  -operator==(nullptr_t); //returns true if the internal pointer is null
- *  -operator==(const owned_ptr&), operator==(T*) //returns pointer equality
+ *  -operator==(const owned_ptr&), operator==(T*); //returns pointer equality
  *  -operator bool; //returns true if the internal pointer is not null
  *
  * T[] Additions / Modifications:
@@ -43,6 +44,7 @@ namespace eden {
  *  -operator==(const char*) const; //returns whether std::strcmp determines equal
  *  -operator std::string_view() const; //if bounded_c_str, O(1). Otherwise, O(N)
  *  -operator std::string() const; //if bounded_c_str, O(1). Otherwise, O(N)
+ *  -length() const; //returns array bound - 1 if bounded, otherwise strlen()
  */
 
 template <class T>
@@ -55,7 +57,7 @@ class owned_ptr {
   static constexpr bool bounded_array = std::is_bounded_array_v<T>;
   static constexpr sz_t array_size = std::extent_v<T, std::rank_v<T> - 1>;
   static constexpr bool elements_comparable = is_array and requires (value_type a, value_type b) {a == b;};
-  static constexpr bool is_string = std::is_same_v<value_type, char>;
+  static constexpr bool is_string = std::is_same_v<value_type, char> and is_array;
 
   ptr internal{nullptr};
 
@@ -182,7 +184,7 @@ public:
   length() const noexcept
   requires is_string {
     if constexpr (bounded_array)
-      return array_size;
+      return array_size - 1;
     else
       return std::strlen(internal);
   }

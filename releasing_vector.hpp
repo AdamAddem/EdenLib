@@ -379,6 +379,7 @@ public:
   requires store_header
   : m_alloc(std::move(get_header_pointer_from(released_data.get())->alloc)),
     m_begin(released_data.release()) {
+    assert(m_begin not_eq nullptr);
     auto h = get_header_pointer_from(m_begin);
     m_size = m_begin + h->size;
     m_cap = m_begin + h->capacity;
