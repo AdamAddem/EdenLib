@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <concepts>
+#include <charconv>
 #include <cstring>
 #include <memory>
 #include <type_traits>
@@ -278,6 +279,26 @@ concept type_instance = requires (T& a) {
   []<typename U, TemplateString str>(type<U, str>) consteval {
   }(a);
 };
+
+template <i64_t N, TemplateString str, sz_t str_size = str.data.size()>
+[[nodiscard]] consteval auto append_number_to_literal_helper_func() noexcept
+-> const char (&)[str_size+22] {
+  struct scuffed {
+    char arr[str_size+22]{};
+    consteval scuffed() {
+      std::copy_n(str.data.data(), str_size, arr);
+      arr[str_size-1] = '<';
+      auto end = std::to_chars(&arr[str_size], &arr[str_size+20], N).ptr;
+      *end = '>';
+      *(++end) = '\0';
+    }
+  };
+  static constexpr scuffed x;
+  return x.arr;
+}
+
+template <i64_t N, TemplateString str, sz_t str_size = str.data.size()>
+static constexpr const char(&append_number_to_literal)[str_size+22] = append_number_to_literal_helper_func<N, str>();
 
 template <class T> concept pointer_c = std::is_pointer_v<T>;
 template <class T> concept enum_c = std::is_enum_v<T>;

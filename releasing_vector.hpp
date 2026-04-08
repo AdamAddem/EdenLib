@@ -354,7 +354,9 @@ public:
 
   using released_ptr = owned_ptr<T[]>;
 
-  constexpr releasing_vector() = default;
+  constexpr releasing_vector()
+  noexcept(std::is_nothrow_default_constructible_v<Allocator>)
+  = default;
 
   template <sz_t N>
   constexpr explicit
@@ -400,8 +402,8 @@ public:
   requires std::is_copy_constructible_v<T>
   : m_alloc(alloc) {allocate_and_construct(count, std::forward<T>(value));}
 
-  constexpr releasing_vector(const releasing_vector &other) = delete;
-  constexpr releasing_vector& operator=(const releasing_vector &other) = delete;
+  constexpr releasing_vector(const releasing_vector&) = delete;
+  constexpr releasing_vector& operator=(const releasing_vector&) = delete;
 
   template <releasing_vector_settings other_settings, allocator_for_c<T> other_allocator>
   requires compatible_settings<other_settings> and same_c<Allocator, other_allocator>
