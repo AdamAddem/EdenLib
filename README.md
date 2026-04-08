@@ -46,23 +46,22 @@ If the data is released, but needs to be accessed as if it were a vector again, 
 When the data is no longer needed, the pointer can be passed to a static method which will handle the destruction and deallocation. <br>
 
 'Settings' are provided allowing you to specify:
-- Initial allocation size.
 - Expansion multiplier.
 - Whether the vector allocates a header alongside the data or provides the user with a handle.
-- Whether to enable string capabilities (releases a null terminated array)
+- Whether to enable string capabilities (will always release a null terminated array).
 
 ### Concepts
 Introduces the 'type' class, allowing for more convenient template meta-programming. <br>
 ```cpp
--Shortened names for common concepts and traits. 
+/* Shortened names for common concepts and traits */
     std::remove_reference_t<T>
     type<T>::no_ref //equivalent
     
--Reads naturally from left to right.
-    std::is_same_v<T, U> | std::is_constructible_v<T, Args...>;
-    type<T>::is<U>       | type<T>::constructible_with<Args...>;
+/* Reads naturally from left to right */
+    std::is_same_v<T, U>    std::is_constructible_v<T, Args...>;
+    type<T>::is<U>          type<T>::constructible_with<Args...>;
      
--Common / Useful transforms and properties.
+/* Common / Useful transforms and properties */
     type<int>::opposite_sign; //unsigned
     type<int[2][3]>::num_dimensions; //2
     type<int[2][8][5]>::dimension_size<1>; //8
@@ -70,7 +69,7 @@ Introduces the 'type' class, allowing for more convenient template meta-programm
     type<int>::is_none_of<int, char>; // false
     type<const int&>::no_cvref; //int
 
--Can be inherited from, allowing for cleaner syntax
+/* Can be inherited from, allowing for cleaner syntax */
     struct Example : type<Example> {};     
     using example_array = Example::as_array;
     
@@ -79,11 +78,11 @@ Introduces the 'type' class, allowing for more convenient template meta-programm
     auto to_array(T&& obj) 
     {...}
  
--Type chaining can be achieved by appending a '_' on every type but the last
+/* Type chaining can be achieved by appending a '_' on every type but the last */
     Example::as_const_::as_array_::as_ptr x; //const Example(*)[]
     type<int>::as_bounded_array_<5>::as_bounded_array<6> y; //int[6][5]
     
--Types may be represented as variables
+/* Types may be represented as variables */
     //type_variable concept filters for type<...> instances
     consteval bool arbitrary_condition(type_variable auto var) {    
         //_i suffix may be applied to get a transformed type variable
@@ -93,13 +92,13 @@ Introduces the 'type' class, allowing for more convenient template meta-programm
                var == type<int>;
     }
 
--A type can 'smuggle' itself as another type
+/* A type can 'smuggle' itself as another type */
     struct Nefarious : type<unsigned> {}; //does not satisfy registered_type concept
     Nefarious::is_integral //true
     Nefarious::as_signed //int
     type<Nefarious>::is_integral //false
  
--Types can be given string representations
+/* Types can be given string representations */
     struct BootlegReflection : type<BootlegReflection, "This Language Sucks!"> {};
     std::cout << BootlegReflection::name << std::endl;
 ```
