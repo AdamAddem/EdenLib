@@ -9,7 +9,6 @@
 #include <type_traits>
 
 namespace eden {
-
 template <class Alloc, class T>
 concept allocator_for_c = requires (Alloc a, T* p, std::size_t n) {
   typename std::allocator_traits<Alloc>::value_type;
@@ -31,9 +30,17 @@ struct TemplateString {
     std::copy_n(str, N, data.begin());
   }
 
-  static consteval sz_t size() noexcept {return N;}
-};
+  template<sz_t OtherN>
+  consteval bool
+  operator==(const TemplateString<OtherN>& other) const noexcept {
+    if constexpr (N not_eq OtherN)
+      return false;
+    else
+      return data == other.data;
+  }
 
+  static consteval sz_t size() noexcept {return N - 1;}
+};
 
 template<>
 struct TemplateString<0> {
@@ -43,90 +50,134 @@ struct TemplateString<0> {
 
 template <class T, TemplateString name_str = TemplateString<0>{}>
 struct type {
-  /* Traits */ #define trait static constexpr bool
-  template <class U> trait is = std::same_as<T, U>;
-  trait is_void = std::is_void_v<T>;
-  trait is_nullptr = std::is_null_pointer_v<T>;
-  trait is_integral = std::is_integral_v<T>;
-  trait is_signed = std::is_signed_v<T>;
-  trait is_unsigned = std::is_unsigned_v<T>;
-  trait is_floating = std::is_floating_point_v<T>;
-  trait is_scalar = std::is_scalar_v<T>;
-  trait is_arithmetic = std::is_arithmetic_v<T>;
-  trait is_primitive = std::is_fundamental_v<T>; trait is_fundamental = is_primitive;
-  trait is_object = std::is_object_v<T>;
-  trait is_compound = std::is_compound_v<T>;
-  trait is_ptr = std::is_pointer_v<T>;
-  trait is_ref = std::is_reference_v<T>;
-  trait is_lvref = std::is_lvalue_reference_v<T>;
-  trait is_rvref = std::is_rvalue_reference_v<T>;
-  trait is_member_ptr = std::is_member_pointer_v<T>;
-  trait is_field_ptr = std::is_member_object_pointer_v<T>; trait is_member_object_ptr = is_field_ptr;
-  trait is_method_ptr = std::is_member_function_pointer_v<T>; trait is_member_method_ptr = is_method_ptr;
-  trait is_const = std::is_const_v<T>;
-  trait is_volatile = std::is_volatile_v<T>;
-  trait is_array = std::is_array_v<T>;
-  trait is_bounded_array = std::is_bounded_array_v<T>;
-  trait is_unbounded_array = std::is_unbounded_array_v<T>;
-  trait is_enum = std::is_enum_v<T>;
-  trait is_enum_class = std::is_scoped_enum_v<T>;
-  trait is_union = std::is_union_v<T>;
-  trait is_class = std::is_class_v<T>;
-  trait is_function = std::is_function_v<T>;
-  trait is_trivial = std::is_trivial_v<T>;
-  trait is_standard_layout = std::is_standard_layout_v<T>;
-  trait has_unique_object_representation = std::has_unique_object_representations_v<T>;
-  trait is_empty = std::is_empty_v<T>;
-  trait is_polymorphic = std::is_polymorphic_v<T>;
-  trait is_abstract = std::is_abstract_v<T>;
-  trait is_final = std::is_final_v<T>;
-  trait is_aggregate = std::is_aggregate_v<T>;
+  using Type = T;
+  static consteval auto type_instance() {return type{};}
 
-  template <class... Args> trait constructible_with = std::is_constructible_v<T, Args...>;
-  template <class... Args> trait trivially_constructible_with = std::is_trivially_constructible_v<T, Args...>;
-  template <class... Args> trait nothrow_constructible_with = std::is_nothrow_constructible_v<T, Args...>;
-  template <class... Args> trait assignable_with = std::is_assignable_v<T, Args...>;
-  template <class... Args> trait trivially_assignable_with = std::is_trivially_assignable_v<T, Args...>;
-  template <class... Args> trait nothrow_assignable_with = std::is_nothrow_assignable_v<T, Args...>;
-  trait default_constructible = std::is_default_constructible_v<T>;
-  trait trivially_default_constructible = std::is_trivially_default_constructible_v<T>;
-  trait nothrow_default_constructible = std::is_nothrow_default_constructible_v<T>;
-  trait copy_constructible = std::is_copy_constructible_v<T>;
-  trait trivially_copy_constructible = std::is_trivially_copy_constructible_v<T>;
-  trait nothrow_copy_constructible = std::is_nothrow_copy_constructible_v<T>;
-  trait copy_assignable = std::is_copy_assignable_v<T>;
-  trait trivially_copy_assignable = std::is_trivially_copy_assignable_v<T>;
-  trait nothrow_copy_assignable = std::is_nothrow_copy_assignable_v<T>;
-  trait move_constructible = std::is_move_constructible_v<T>;
-  trait trivially_move_constructible = std::is_trivially_move_constructible_v<T>;
-  trait nothrow_move_constructible = std::is_nothrow_move_constructible_v<T>;
-  trait move_assignable = std::is_move_assignable_v<T>;
-  trait trivially_move_assignable = std::is_trivially_move_assignable_v<T>;
-  trait nothrow_move_assignable = std::is_nothrow_move_assignable_v<T>;
-  trait destructible = std::is_destructible_v<T>;
-  trait trivially_destructible = std::is_trivially_destructible_v<T>;
-  trait nothrow_destructible = std::is_nothrow_destructible_v<T>;
-  trait has_virtual_destructor = std::has_virtual_destructor_v<T>;
-  template <class U> trait swappable_with = std::swappable_with<T, U>;
-  template <class U> trait nothrow_swappable_with = std::is_nothrow_swappable_with_v<T, U>;
-  trait swappable = std::swappable<T>;
-  trait nothrow_swappable = std::is_nothrow_swappable_v<T>;
+  template <class OtherType, TemplateString other_name>
+  consteval bool
+  operator==(const type<OtherType, other_name>&) const noexcept {
+    if constexpr (std::is_same_v<Type, OtherType>)
+      return true;
+    else
+      return false;
+  }
 
-  template <class U> trait same_as = std::same_as<T, U>;
-  template <class U> trait base_of = std::is_base_of_v<T, U>;
-  template <class U> trait derived_from = std::derived_from<T, U>;
-  template <class U> trait convertible_to = std::convertible_to<T, U>;
-  template <class U> trait nothrow_convertible_to = std::is_nothrow_convertible_v<T, U>;
-  template <class U> trait layout_compatable = std::is_layout_compatible_v<T, U>;
-  template <class... Args> trait invocable_with = std::is_invocable_v<T, Args...>;
-  template <class Return, class... Args> trait invocable_r_with = std::is_invocable_r_v<Return, T, Args...>;
-  template <class... Args> trait nothrow_invocable_with = std::is_nothrow_invocable_v<T, Args...>;
-  template <class Return, class... Args> trait nothrow_invocable_r_with = std::is_nothrow_invocable_r_v<Return, T, Args...>;
-  /* Traits */ #undef trait
+  /* Traits */
+  #define trait(trait_name, ...) \
+  static constexpr bool trait_name = __VA_ARGS__; \
+  static consteval bool _ ## trait_name () {return trait_name;}
 
-  /* Properties */ #define property static constexpr auto
-  static consteval sz_t alignment() {return alignof(T);}
-  static consteval sz_t size() {return sizeof(T);}
+  #define template_trait(template_param, trait_name, ...) \
+  template <class template_param> \
+  static constexpr bool trait_name = __VA_ARGS__; \
+  template <class template_param> \
+  static consteval bool _ ## trait_name (type<template_param>) {return trait_name<template_param>;}
+
+  #define va_template_trait(args_name, trait_name, ...) \
+  template <class... args_name> \
+  static constexpr bool trait_name = __VA_ARGS__; \
+  template <class... args_name> \
+  static consteval bool _ ## trait_name (type<args_name>...) {return trait_name<args_name...>;}
+
+  trait(is_void, std::is_void_v<T>)
+  trait(is_nullptr, std::is_null_pointer_v<T>)
+  trait(is_integral, std::is_integral_v<T>)
+  trait(is_signed, std::is_signed_v<T>)
+  trait(is_unsigned, std::is_unsigned_v<T>)
+  trait(is_floating, std::is_floating_point_v<T>)
+  trait(is_scalar, std::is_scalar_v<T>)
+  trait(is_arithmetic, std::is_arithmetic_v<T>)
+  trait(is_primitive, std::is_fundamental_v<T>) trait(is_fundamental, is_primitive)
+  trait(is_object, std::is_object_v<T>)
+  trait(is_compound, std::is_compound_v<T>)
+  trait(is_ptr, std::is_pointer_v<T>)
+  trait(is_ref, std::is_reference_v<T>)
+  trait(is_lvref, std::is_lvalue_reference_v<T>)
+  trait(is_rvref, std::is_rvalue_reference_v<T>)
+  trait(is_member_ptr, std::is_member_pointer_v<T>)
+  trait(is_field_ptr, std::is_member_object_pointer_v<T>) trait(is_member_object_ptr, is_field_ptr)
+  trait(is_method_ptr, std::is_member_function_pointer_v<T>) trait(is_member_method_ptr, is_method_ptr)
+  trait(is_const, std::is_const_v<T>)
+  trait(is_volatile, std::is_volatile_v<T>)
+  trait(is_array, std::is_array_v<T>)
+  trait(is_bounded_array, std::is_bounded_array_v<T>)
+  trait(is_unbounded_array, std::is_unbounded_array_v<T>)
+  trait(is_enum, std::is_enum_v<T>)
+  trait(is_enum_class, std::is_scoped_enum_v<T>)
+  trait(is_union, std::is_union_v<T>)
+  trait(is_class, std::is_class_v<T>)
+  trait(is_function, std::is_function_v<T>)
+  trait(is_trivial, std::is_trivial_v<T>)
+  trait(is_standard_layout, std::is_standard_layout_v<T>)
+  trait(has_unique_object_representation, std::has_unique_object_representations_v<T>)
+  trait(is_empty, std::is_empty_v<T>)
+  trait(is_polymorphic, std::is_polymorphic_v<T>)
+  trait(is_abstract, std::is_abstract_v<T>)
+  trait(is_final, std::is_final_v<T>)
+  trait(is_aggregate, std::is_aggregate_v<T>)
+
+  va_template_trait(Args, constructible_with, comma(std::is_constructible_v<T, Args...>))
+  va_template_trait(Args, trivially_constructible_with , comma(std::is_trivially_constructible_v<T, Args...>))
+  va_template_trait(Args, nothrow_constructible_with , comma(std::is_nothrow_constructible_v<T, Args...>))
+  va_template_trait(Args, assignable_with , comma(std::is_assignable_v<T, Args...>))
+  va_template_trait(Args, trivially_assignable_with , comma(std::is_trivially_assignable_v<T, Args...>))
+  va_template_trait(Args, nothrow_assignable_with , comma(std::is_nothrow_assignable_v<T, Args...>))
+
+  trait(default_constructible,  std::is_default_constructible_v<T>)
+  trait(trivially_default_constructible,  std::is_trivially_default_constructible_v<T>)
+  trait(nothrow_default_constructible,  std::is_nothrow_default_constructible_v<T>)
+  trait(copy_constructible,  std::is_copy_constructible_v<T>)
+  trait(trivially_copy_constructible,  std::is_trivially_copy_constructible_v<T>)
+  trait(nothrow_copy_constructible,  std::is_nothrow_copy_constructible_v<T>)
+  trait(copy_assignable,  std::is_copy_assignable_v<T>)
+  trait(trivially_copy_assignable,  std::is_trivially_copy_assignable_v<T>)
+  trait(nothrow_copy_assignable,  std::is_nothrow_copy_assignable_v<T>)
+  trait(move_constructible,  std::is_move_constructible_v<T>)
+  trait(trivially_move_constructible,  std::is_trivially_move_constructible_v<T>)
+  trait(nothrow_move_constructible,  std::is_nothrow_move_constructible_v<T>)
+  trait(move_assignable,  std::is_move_assignable_v<T>)
+  trait(trivially_move_assignable,  std::is_trivially_move_assignable_v<T>)
+  trait(nothrow_move_assignable,  std::is_nothrow_move_assignable_v<T>)
+  trait(destructible,  std::is_destructible_v<T>)
+  trait(trivially_destructible,  std::is_trivially_destructible_v<T>)
+  trait(nothrow_destructible,  std::is_nothrow_destructible_v<T>)
+  trait(has_virtual_destructor,  std::has_virtual_destructor_v<T>)
+
+  trait(swappable, std::swappable<T>)
+  trait(nothrow_swappable, std::is_nothrow_swappable_v<T>)
+  template_trait(U, swappable_with, std::swappable_with<T, U>)
+  template_trait(U, nothrow_swappable_with, std::is_nothrow_swappable_with_v<T, U>)
+  template_trait(U, is, std::same_as<T, U>)
+  template_trait(U, base_of, std::is_base_of_v<T, U>)
+  template_trait(U, derived_from, std::derived_from<T, U>)
+  template_trait(U, convertible_to, std::convertible_to<T, U>)
+  template_trait(U, nothrow_convertible_to, std::is_nothrow_convertible_v<T, U>)
+  template_trait(U, layout_compatable, std::is_layout_compatible_v<T, U>)
+
+  va_template_trait(Types, is_one_of, (is<Types> or ...))
+  va_template_trait(Types, is_none_of, not is_one_of<Types...>)
+  va_template_trait(Types, is_only_one_of, (is<Types> + ...) == 1)
+  va_template_trait(Args, invocable_with, std::is_invocable_v<T, Args...>)
+  va_template_trait(Args, nothrow_invocable_with, std::is_nothrow_invocable_v<T, Args...>)
+
+  template <class Return, class... Args>
+  static constexpr bool invocable_r_with = std::is_invocable_r_v<Return, T, Args...>;
+  template <class Return, class... Args>
+  static consteval bool _invocable_r_with(type<Return>, type<Args>...) {return invocable_r_with<Return, Args...>;}
+
+  template <class Return, class... Args>
+  static constexpr bool nothrow_invocable_r_with = std::is_nothrow_invocable_r_v<Return, T, Args...>;
+  template <class Return, class... Args>
+  static consteval bool _nothrow_invocable_r_with(type<Return>, type<Args>...) {return nothrow_invocable_r_with<Return, Args...>;}
+
+  #undef trait
+  #undef template_trait
+  #undef va_template_trait
+  /* Traits */
+
+  /* Properties */ #define property static constexpr sz_t
+  property alignment() {return alignof(T);}
+  property size() {return sizeof(T);}
   property num_dimensions = std::rank_v<T>; property rank = num_dimensions;
   property first_dimension_size = std::extent_v<T, 0>;
   property last_dimension_size = std::extent_v<T, u32_t(num_dimensions) - 1>;
@@ -134,59 +185,98 @@ struct type {
   /* Properties */ #undef property
 
   /* Type Transformations */
-  using no_const = std::remove_const_t<T>;
-  using as_const = std::add_const_t<T>;
-  using no_volatile = std::remove_volatile_t<T>;
-  using as_volatile = std::add_volatile_t<T>;
-  using no_cv = std::remove_cv_t<T>;
-  using as_cv = std::add_cv_t<T>;
+#define chain_type(transform_name, ...) \
+  using transform_name = __VA_ARGS__ ; \
+  using transform_name ## _ = type<transform_name, name_str>; \
+  static constexpr auto transform_name ## _i() {return type<transform_name, name_str>{};}
 
-  using no_ref = std::remove_reference_t<T>;
-  using as_lvref = std::add_lvalue_reference_t<T>;
-  using as_ref = as_lvref;
-  using as_rvref = std::add_rvalue_reference_t<T>;
-  using as_refref = as_rvref;
-  using no_cvref = type<no_ref>::no_const;
-  using as_const_lvref = const no_cvref&;
-  using as_const_ref = as_const_lvref;
-  using as_const_rvref = const no_cvref&&;
-  using as_const_refref = as_const_rvref;
+#define template_chain_type(template_, template_param, transform_name, ...) \
+  template_ \
+  using transform_name = __VA_ARGS__; \
+  template_ \
+  using transform_name ## _ = type<transform_name<template_param>, name_str>; \
+  template_ \
+  static constexpr auto transform_name ## _i() {return type<transform_name<template_param>, name_str>{};}
 
-  using no_ptr = std::remove_pointer_t<T>;
-  using pointed_type = no_ptr;
-  using as_ptr = std::add_pointer_t<T>;
-
-  template <sz_t N>
-  using as_bounded_array = T[N];
-  using as_array = T[];
-
+#define va_template_chain_type(template_param, transform_name, ...) \
+  template<class... template_param> \
+  using transform_name = __VA_ARGS__ ; \
+  template<class... template_param> \
+  using transform_name ## _ = type<transform_name<template_param...>, name_str>; \
+  template<class... template_param> \
+  static constexpr auto transform_name ## _i(){return type<transform_name<template_param...>, name_str>{};}
 
 private:
   template<typename K> struct opposite_sign_helper_struct{using type = K;};
-  template<std::signed_integral K> struct opposite_sign_helper_struct<K> {using type = type<K>::as_unsigned;};
-  template<std::unsigned_integral K> struct opposite_sign_helper_struct<K> {using type = type<K>::as_signed;};
+  template<std::signed_integral K> struct opposite_sign_helper_struct<K> {using type = type<K, name_str>::as_unsigned;};
+  template<std::unsigned_integral K> struct opposite_sign_helper_struct<K> {using type = type<K, name_str>::as_signed;};
 
   template<typename K> struct sign_helper_struct{using as_signed = K; using as_unsigned = K;};
   template<std::integral K> struct sign_helper_struct<K> {using as_signed = std::make_signed_t<K>; using as_unsigned = std::make_unsigned_t<K>;};
+
 public:
-  using as_signed = sign_helper_struct<T>::as_signed;
-  using as_unsigned = sign_helper_struct<T>::as_unsigned;
-  using opposite_sign = opposite_sign_helper_struct<T>::type;
+  chain_type(no_const, std::remove_const_t<T>)
+  chain_type(as_const, const T)
+  chain_type(no_volatile, std::remove_volatile_t<T>)
+  chain_type(as_volatile , std::add_volatile_t<T>)
+  chain_type(no_cv , std::remove_cv_t<T>)
+  chain_type(as_cv , std::add_cv_t<T>)
+  chain_type(no_ref, std::remove_reference_t<T>)
 
-  using as_decayed = std::decay_t<T>;
+  chain_type(as_lvref, std::add_lvalue_reference_t<T>) chain_type(as_ref, as_lvref)
+  chain_type(as_rvref, std::add_rvalue_reference_t<T>) chain_type(as_refref, as_rvref)
+  chain_type(no_cvref, type<no_ref, name_str>::no_cv)
+  chain_type(as_const_lvref, const no_cvref&)
+  chain_type(as_const_ref, as_const_lvref)
+  chain_type(as_const_rvref, const no_cvref&&)
+  chain_type(as_const_refref, as_const_rvref)
 
-  template <class K = T>
-  requires std::is_enum_v<K>
-  using underlying_type = std::underlying_type_t<K>;
+  template_chain_type(template <sz_t N>, N, as_bounded_array, T[N])
 
-  template<class... Types> using common_type_with = std::common_type_t<T, Types...>;
+  chain_type(no_ptr, std::remove_pointer_t<T>)
+  chain_type(as_ptr, type<no_ref, name_str>::Type *)
+  chain_type(as_array, T[])
+  chain_type(as_signed, sign_helper_struct<T>::as_signed)
+  chain_type(as_unsigned, sign_helper_struct<T>::as_unsigned)
+  chain_type(opposite_sign, opposite_sign_helper_struct<T>::type)
+  chain_type(as_decayed, std::decay_t<T>)
 
-  template <class... Args> using invoke_result = std::invoke_result_t<T, Args...>;
+  template_chain_type(
+    template <class K = T> requires std::is_enum_v<K>,
+    K,
+    underlying_type,
+    std::underlying_type_t<K>)
+
+  va_template_chain_type(
+    Types,
+    common_type_with,
+    std::common_type_t<T, Types...>)
+
+  va_template_chain_type(
+    Args,
+    invoke_result,
+    std::invoke_result_t<T, Args...>)
+
+  #undef chain_type
+  #undef template_chain_type
+  #undef va_template_chain_type
   /* Type Transformations */
 
   /* Utilities */
   static constexpr const char* name = name_str.data.data();
   /* Utilities */
+};
+
+template <class T>
+concept registered_type = std::derived_from<T, type<T>> or
+  requires (T& a) {
+    []<TemplateString N>(type<T, N>){}(a);
+  };
+
+template <class T>
+concept type_instance = requires (T& a) {
+  []<typename U, TemplateString str>(type<U, str>) consteval {
+  }(a);
 };
 
 template <class T> concept pointer_c = std::is_pointer_v<T>;

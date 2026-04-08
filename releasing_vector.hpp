@@ -1,23 +1,14 @@
 #pragma once
 #include "assume_assert.hpp"
 #include "concepts.hpp"
+#include "type_flags.hpp"
 #include "typedefs.hpp"
 #include <format>
 #include <memory>
 #include <ranges>
 
 namespace eden {
-/*  idx 0      idx 1...
- *  [sz, cap], [...]
- *
- *
- */
-
-
-
 /*
-*  InitialCapacity (default 0):
-*    -The initial capacity for the vector, equivalent to calling .reserve() immediately after construction.
 *  ExpansionMult (default 2):
 *    -The multiplier applied to the capacity everytime it the vector must expand.
 *  StoreHeader (default true):
@@ -30,15 +21,12 @@ namespace eden {
 */
 template <
           bool StoreHeader = true,
-          u64_t InitialCapacity = 0,
           u64_t ExpansionMult = 2,
           bool CString = false>
 requires (ExpansionMult > 1)
-struct releasing_vector_settings
-: type<releasing_vector_settings<StoreHeader, InitialCapacity, ExpansionMult, CString>, "releasing_vector_settings"> {
+struct releasing_vector_settings {
   using Noheader = releasing_vector_settings<false>;
 
-  static constexpr u64_t initial_capacity = InitialCapacity;
   static constexpr u64_t expansion_mult = ExpansionMult;
   static constexpr bool store_header = StoreHeader;
   static constexpr bool is_string = CString;
@@ -47,9 +35,8 @@ struct releasing_vector_settings
 template <class T, releasing_vector_settings settings = releasing_vector_settings{}, allocator_for_c<T> Allocator = std::allocator<T>>
 requires (settings.is_string ? (sizeof(T) == 1 and type<T>::is_integral) : true) and
          (std::allocator_traits<Allocator>::propagate_on_container_move_assignment::value)
-class releasing_vector : public type<releasing_vector<T, settings>, "releasing_vector"> {
+class releasing_vector {
   static constexpr bool is_string = decltype(settings)::is_string;
-  static constexpr sz_t initial_capacity = decltype(settings)::initial_capacity;
   static constexpr sz_t expansion_mult = decltype(settings)::expansion_mult;
   static constexpr bool store_header = decltype(settings)::store_header;
   static constexpr bool trivially_destructible = std::is_trivially_destructible_v<T>;
@@ -84,7 +71,7 @@ class releasing_vector : public type<releasing_vector<T, settings>, "releasing_v
   [[nodiscard]] static constexpr header*
   get_header_pointer_from(T* data) noexcept
   requires store_header {
-    assert(data);
+    assume_assert(data not_eq nullptr);
                          //https://wiki.c2.com/?ThreeStarProgrammer/
     return *std::launder(reinterpret_cast<header**>(data - header_count));
   }
@@ -97,7 +84,7 @@ class releasing_vector : public type<releasing_vector<T, settings>, "releasing_v
   [[nodiscard]] static constexpr header**
   get_header_ptr_location_from(T* data) noexcept
   requires store_header {
-    assert(data);
+    assume_assert(data not_eq nullptr);
     return std::launder(reinterpret_cast<header**>(data - header_count));
   }
 
@@ -118,9 +105,9 @@ class releasing_vector : public type<releasing_vector<T, settings>, "releasing_v
 
   constexpr void allocate(sz_t count)
   noexcept(nothrow_allocating) {
-    assert(m_begin == nullptr);
-    assert(m_size == nullptr);
-    assert(m_cap == nullptr);
+    assume_assert(m_begin == nullptr);
+    assume_assert(m_size == nullptr);
+    assume_assert(m_cap == nullptr);
 
     m_size = m_begin = m_alloc.allocate(count + header_count) + header_count;
     m_cap = m_begin + count;
@@ -367,11 +354,13 @@ public:
 
   using released_ptr = owned_ptr<T[]>;
 
-  constexpr releasing_vector()
-  noexcept(nothrow_allocating) {
-    if constexpr (initial_capacity > 0)
-      first_allocation(initial_capacity);
-  }
+  constexpr releasing_vector() = default;
+
+  template <sz_t N>
+  constexpr explicit
+  releasing_vector(flags::ReserveInitial<N>)
+  noexcept(nothrow_allocating)
+  {first_allocation(N);}
 
   constexpr explicit
   releasing_vector(released_ptr released_data)
@@ -379,7 +368,7 @@ public:
   requires store_header
   : m_alloc(std::move(get_header_pointer_from(released_data.get())->alloc)),
     m_begin(released_data.release()) {
-    assert(m_begin not_eq nullptr);
+    assume_assert(m_begin not_eq nullptr);
     auto h = get_header_pointer_from(m_begin);
     m_size = m_begin + h->size;
     m_cap = m_begin + h->capacity;
@@ -426,7 +415,7 @@ public:
     if constexpr (alloc_traits::propagate_on_container_swap)
       std::swap(m_alloc, other.m_alloc);
     else
-      assert(m_alloc not_eq other.m_alloc and "Undefined behavior if this triggers.");
+      assume_assert(m_alloc not_eq other.m_alloc and "Undefined behavior if this triggers.");
 
     std::swap(m_begin, other.m_begin); std::swap(m_size, other.m_size);
     std::swap(m_cap, other.m_cap); std::swap(m_alloc, other.m_alloc);
@@ -609,7 +598,7 @@ public:
   to_span() const noexcept
   {return static_cast<std::span<T>>(*this);}
 
-  [[nodiscard]] constexpr explicit
+  [[nodiscard]] constexpr
   operator std::string_view() const noexcept
   requires is_string
   {return std::string_view(m_begin, size());}
@@ -643,7 +632,7 @@ public:
         return false;
       ++i;
     }
-    assert(c_str[N-1] == '\0' and "Pass a terminated string to this function, doofus");
+    assume_assert(c_str[N-1] == '\0' and "Pass a terminated string to this function, doofus");
     return true;
   }
 
@@ -754,10 +743,10 @@ public:
   {assume_assert(m_begin); assume_assert(m_size not_eq m_begin); alloc_traits::destroy(m_alloc, m_size--);}
 };
 
-using releasing_string = releasing_vector<char, releasing_vector_settings<true, 0, 2, true>{}>;
+using releasing_string = releasing_vector<char, releasing_vector_settings<true, 2, true>{}>;
 
 template <class T>
-using noheader_releasing_vector = releasing_vector<T, releasing_vector_settings<true, 0, 2, true>{}>;
+using noheader_releasing_vector = releasing_vector<T, releasing_vector_settings<true, 2, true>{}>;
 
 template <class T, releasing_vector_settings lhs_settings, releasing_vector_settings rhs_settings, allocator_for_c<T> allocator>
 requires releasing_vector<T, lhs_settings, allocator>::template compatible_settings<rhs_settings>

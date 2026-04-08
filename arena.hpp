@@ -24,7 +24,7 @@ public:
 
   template <class T>
   [[nodiscard]] constexpr T*
-  allocate(sz_t n) noexcept {
+  allocate(sz_t n = 1) noexcept {
     if (next_arena)
       return next_arena->allocate<T>(n);
 

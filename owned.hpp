@@ -1,5 +1,6 @@
 #pragma once
 #include "typedefs.hpp"
+#include <string>
 #include <cstring>
 #include <span>
 
