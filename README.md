@@ -174,11 +174,11 @@ Introduces the 'type' class, allowing for more convenient template meta-programm
  
 /* Types can be given string representations */
     struct BootlegReflection : type<BootlegReflection, "This Language Sucks!"> {};
-    std::cout << BootlegReflection::name << std::endl;
+    std::cout << BootlegReflection::name;
     
     //append_number_to_literal helper provided
     template <sz_t N>
     struct Numbered : type<Numbered<N>, append_number_to_literal<N, "Numbered">> {};
     Numbered<3> x;
-    std::cout << x.name << std::endl; //Numbered<3>
+    std::cout << x.name; //Numbered<3>
 ```

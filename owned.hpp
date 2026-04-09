@@ -163,7 +163,7 @@ public:
   requires is_array
   {return std::span(internal, length);}
 
-  [[nodiscard]] constexpr explicit
+  [[nodiscard]] constexpr
   operator std::string_view() const noexcept
   requires is_string {
     if constexpr (bounded_array)

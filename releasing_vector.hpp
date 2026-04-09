@@ -1,9 +1,11 @@
 #pragma once
 #include "assume_assert.hpp"
 #include "concepts.hpp"
+#include "owned.hpp"
 #include "type_flags.hpp"
 #include "typedefs.hpp"
 #include <format>
+#include <iostream>
 #include <memory>
 #include <ranges>
 
@@ -592,6 +594,23 @@ public:
     ::operator delete(header_ptr, static_cast<std::align_val_t>(alignof(header)));
   }
 
+  static constexpr released_ptr
+  copy_data(const released_ptr& data)
+  noexcept(nothrow_deallocating and nothrow_destruct)
+  requires store_header and copy_constructible_c<T> {
+    if (data == nullptr)
+      return released_ptr(nullptr);
+
+    auto header_ptr = get_header_pointer_from(const_cast<T*>(data.get()));
+    releasing_vector v(header_ptr->alloc);
+    v.reserve(header_ptr->capacity);
+
+    const sz_t size = header_ptr->size;
+    for (auto i{0uz}; i<size; ++i)
+      v.emplace_back(data[i]);
+    return v.release();
+  }
+
   [[nodiscard]] constexpr explicit
   operator std::span<T>() const noexcept
   {return std::span(m_begin, size());}
@@ -662,7 +681,7 @@ public:
   size() const noexcept
   {return m_size - m_begin;}
 
-  constexpr void reserve(sz_t new_capacity) const noexcept {
+  constexpr void reserve(sz_t new_capacity) noexcept {
     if (m_begin == nullptr)
       first_allocation(new_capacity);
     else if (capacity() < new_capacity)
@@ -732,9 +751,6 @@ public:
     alloc_traits::construct(m_alloc, m_size, std::forward<Args>(args)...);
     return *(m_size++);
   }
-
-  constexpr void push_back(const T& value)
-  noexcept(nothrow_copy_construct) {emplace_back(value);}
 
   constexpr void push_back(T&& value)
   noexcept(std::is_nothrow_move_constructible_v<T>)

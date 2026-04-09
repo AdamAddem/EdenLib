@@ -48,7 +48,7 @@ public:
   ~Arena() {
     if (curr == nullptr)
       return;
-    ::operator delete(static_cast<char*>(curr) - (N - remaining));
+    ::operator delete(static_cast<char*>(curr) - (N - remaining), std::align_val_t{8});
     delete next_arena;
   }
 

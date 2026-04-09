@@ -280,6 +280,13 @@ concept type_instance = requires (T& a) {
   }(a);
 };
 
+
+struct Example : type<Example, "Example"> {
+
+};
+
+
+
 template <i64_t N, TemplateString str, sz_t str_size = str.data.size()>
 [[nodiscard]] consteval auto append_number_to_literal_helper_func() noexcept
 -> const char (&)[str_size+22] {
