@@ -385,9 +385,14 @@ public:
   operator[](sz_t idx) const noexcept
   {return internal[idx];}
 
-  constexpr explicit
+  [[nodiscard]] constexpr explicit
   operator bool() const noexcept
   {return internal not_eq nullptr;}
+
+  [[nodiscard]] constexpr
+  operator std::string_view() const noexcept
+  requires is_string
+  {return std::string_view(internal, size());}
 
 };
 
