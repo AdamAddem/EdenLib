@@ -1,8 +1,9 @@
 #pragma once
 #include "typedefs.hpp"
-#include <string>
 #include <cstring>
 #include <span>
+#include <string>
+#include <utility>
 
 namespace eden {
 /* Owned Pointer:
@@ -47,6 +48,30 @@ namespace eden {
  *  -operator std::string() const; //if bounded_c_str, O(1). Otherwise, O(N)
  *  -length() const; //returns array bound - 1 if bounded, otherwise strlen()
  */
+
+[[nodiscard]] static constexpr bool
+streq(const char* first, const char* second, sz_t len) noexcept {
+  auto i{0uz};
+  while (i not_eq len) {
+    if (first[i] not_eq second[i])
+      return false;
+    ++i;
+  }
+  return true;
+}
+
+[[nodiscard]] static constexpr bool
+streq(const char* first, const char* second) noexcept {
+  auto i{0uz};
+  while (true) {
+    if (first[i] not_eq second[i])
+      return false;
+    if (first[i] == '\0')
+      return true;
+    ++i;
+  }
+  std::unreachable();
+}
 
 template <class T>
 class owned_ptr {
@@ -133,8 +158,9 @@ public:
 
   [[nodiscard]] constexpr bool
   operator==(const_ptr other) const noexcept {
-    if constexpr (is_string)
-      return std::strcmp(internal, other) == 0;
+    if constexpr (is_string) {
+      return streq(internal, other);
+    }
     else
       return internal == other;
   }
@@ -193,10 +219,181 @@ public:
 
 template <class T>
 using nullable_owned_ptr = owned_ptr<T>;
-
-using c_str = owned_ptr<char[]>;
-
 template <sz_t N>
-using bounded_c_str = owned_ptr<char[N]>;
+using owned_bounded_cstr = owned_ptr<char[N]>;
+using owned_cstr = owned_ptr<char[]>;
+
+template <class T, bool condition>
+struct ContainsIf {};
+
+template <class T>
+struct ContainsIf<T, false> {};
+
+template <class T>
+struct ContainsIf<T, true> {T m;};
+
+template <class T, sz_t Extent = std::dynamic_extent>
+requires (Extent > 0)
+class owned_span {
+  static constexpr bool dynamicly_sized = Extent == std::dynamic_extent;
+  static constexpr bool is_string = same_c<T, char>;
+  static constexpr bool elements_comparable = requires (T a, T b) {a == b;};
+
+  T* internal;
+  [[no_unique_address]]
+  ContainsIf<sz_t, dynamicly_sized> length;
+public:
+
+  constexpr owned_span() noexcept
+  requires dynamicly_sized
+  : internal(nullptr) {}
+
+  constexpr explicit
+  owned_span(T* mine_now, sz_t count) noexcept
+  requires dynamicly_sized
+  : internal(mine_now), length{count} {}
+
+  constexpr explicit
+  owned_span(owned_ptr<T[]> mine_now, sz_t count) noexcept
+  requires dynamicly_sized
+  : internal(mine_now.release()), length{count} {}
+
+  template <sz_t N>
+  constexpr explicit
+  owned_span(owned_ptr<T[N]> mine_now) noexcept
+  requires (dynamicly_sized ? true : N == Extent)
+  : internal(mine_now.release()) {
+    if constexpr(dynamicly_sized)
+      length.m = N;
+  }
+
+  constexpr explicit
+  owned_span(owned_cstr str) noexcept
+  requires (dynamicly_sized and is_string)
+  : internal(str.release())
+  {length.m = std::char_traits<char>::length(internal);}
+
+  owned_span(const owned_span&) = delete;
+  owned_span& operator=(const owned_span&) = delete;
+
+  template <sz_t OtherExtent>
+  constexpr owned_span(owned_span<T, OtherExtent>&& other) noexcept
+  requires dynamicly_sized
+  : internal(other.internal) {
+    other.internal = nullptr;
+    if constexpr (other.dynamicly_sized)
+      length.m = other.length.m;
+    else length.m = OtherExtent;
+  }
+
+  constexpr owned_span(owned_span&& other) noexcept
+  requires (not dynamicly_sized)
+  : internal(other.internal)
+  {other.internal = nullptr;}
+
+  template <sz_t OtherExtent>
+  constexpr owned_span&
+  operator=(owned_span<T, OtherExtent>&& other) noexcept
+  requires dynamicly_sized {
+    internal = other.internal;
+    other.internal = nullptr;
+    if constexpr (other.dynamicly_sized) {
+      length.m = other.length.m;
+      other.length.m = 0;
+    }
+    else
+      length.m = OtherExtent;
+
+    return *this;
+  }
+
+  constexpr owned_span&
+  operator=(owned_span&& other) noexcept
+  requires (not dynamicly_sized) {
+    internal = other.internal;
+    other.internal = false;
+    return *this;
+  }
+
+  constexpr owned_span&
+  operator=(owned_cstr str) noexcept
+  requires (dynamicly_sized and is_string) {
+    internal = str.release();
+    length.m = std::char_traits<char>::length(internal);
+    return *this;
+  }
+
+  [[nodiscard]] constexpr T*
+  get() noexcept {return internal;}
+
+  [[nodiscard]] constexpr const T*
+  get() const noexcept {return internal;}
+
+  [[nodiscard]] constexpr T*
+  release() noexcept
+  {T* retval = internal; internal = nullptr; return retval;}
+
+  constexpr void
+  reset(T* mine_now = nullptr) noexcept
+  {internal = mine_now;}
+
+  [[nodiscard]] constexpr sz_t
+  size() const noexcept {
+    if constexpr(dynamicly_sized)
+      return length.m;
+    else return Extent;
+  }
+
+  [[nodiscard]] constexpr bool
+  operator==(const decltype(nullptr)) const noexcept
+  {return internal == nullptr;}
+
+  template <sz_t OtherExtent>
+  [[nodiscard]] constexpr bool
+  operator==(const owned_span<T, OtherExtent>& other) const noexcept {
+    if constexpr (not elements_comparable)
+      return internal == other.internal;
+
+    if (size() not_eq other.size())
+      return false;
+    for (auto i{0uz}; i<size(); ++i) {
+      if (internal[i] not_eq other.internal[i])
+        return false;
+    }
+    return true;
+  }
+
+  template <sz_t N>
+  [[nodiscard]] constexpr bool
+  operator==(const char(&c_str)[N]) const noexcept
+  requires is_string {
+    if (size() not_eq N)
+      return false;
+    return streq(internal, c_str, N);
+  }
+
+  [[nodiscard]] constexpr bool
+  operator==(const char* c_str) const noexcept
+  requires is_string
+  {return streq(internal, c_str);}
+
+  [[nodiscard]] constexpr T&
+  operator[](sz_t idx) noexcept
+  {return internal[idx];}
+
+  [[nodiscard]] constexpr const T&
+  operator[](sz_t idx) const noexcept
+  {return internal[idx];}
+
+  constexpr explicit
+  operator bool() const noexcept
+  {return internal not_eq nullptr;}
+
+};
+
+template <class T, sz_t Extent = std::dynamic_extent>
+using nullable_owned_span = owned_span<T, Extent>;
+
+using owned_stringview = owned_span<char>;
 
 }

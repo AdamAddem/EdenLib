@@ -355,6 +355,7 @@ public:
   };
 
   using released_ptr = owned_ptr<T[]>;
+  using released_span = owned_span<T>;
 
   constexpr releasing_vector()
   noexcept(std::is_nothrow_default_constructible_v<Allocator>)
@@ -380,6 +381,12 @@ public:
       pop_back();
     std::destroy(h);
   }
+
+  constexpr explicit
+  releasing_vector(released_span released_data)
+  noexcept(type<Allocator>::nothrow_move_constructible)
+  requires store_header
+  : releasing_vector(released_ptr(released_data.release())) {}
 
   template <sz_t N>
   constexpr explicit
@@ -553,6 +560,13 @@ public:
     return released_ptr(data);
   }
 
+  [[nodiscard]] constexpr released_span
+  release_span() noexcept
+  requires store_header {
+    auto sz = size();
+    return released_span(release(), sz);
+  }
+
   [[nodiscard]] constexpr data_handle
   release() noexcept
   requires (not store_header) {
@@ -594,21 +608,35 @@ public:
     ::operator delete(header_ptr, static_cast<std::align_val_t>(alignof(header)));
   }
 
+  //investigate possible bug involving string specialization
+  //this might be adding a redundant null terminator
   static constexpr released_ptr
   copy_data(const released_ptr& data)
   noexcept(nothrow_deallocating and nothrow_destruct)
-  requires store_header and copy_constructible_c<T> {
+  requires (store_header and copy_constructible_c<T>) {
     if (data == nullptr)
       return released_ptr(nullptr);
 
     auto header_ptr = get_header_pointer_from(const_cast<T*>(data.get()));
-    releasing_vector v(header_ptr->alloc);
-    v.reserve(header_ptr->capacity);
-
     const sz_t size = header_ptr->size;
+    releasing_vector v(header_ptr->alloc);
+    v.reserve(size);
+
     for (auto i{0uz}; i<size; ++i)
       v.emplace_back(data[i]);
     return v.release();
+  }
+
+  static constexpr sz_t
+  data_size(const released_ptr& data) noexcept {
+    auto header_ptr = get_header_pointer_from(data.get());
+    return header_ptr->size;
+  }
+
+  static constexpr sz_t
+  data_capacity(const released_ptr& data) noexcept {
+    auto header_ptr = get_header_pointer_from(data.get());
+    return header_ptr->capacity;
   }
 
   [[nodiscard]] constexpr explicit

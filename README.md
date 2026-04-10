@@ -50,6 +50,9 @@ c_str specialization provided, with more utilities:
 - operator std::string
 - length()
 
+### Owned Span
+Similar to owned_ptr, but for span.
+
 ### Releasing Vector
 An implementation of a vector able to 'release' ownership over its internal buffer. <br>
 If the data is released, but needs to be accessed as if it were a vector again, a new releasing_vector can claim ownership. <br>
@@ -77,23 +80,35 @@ API:
     template <sz_t N> 
     explicit (flags::ReserveInitial<N>); //pass in a flags::reserve_initial<N> instance 
     
-    explicit (released_ptr released_data) requires store_header; //reclaims ownership of released data  
+    explicit (released_ptr released_data) requires store_header;    //reclaims ownership over data previously released
+    explicit (released_span released_data) requires store_header;   //same as above
      
-    //copy constructor / assignment deleted partially out of laziness
-    //and because this container shouldn't really be used for copying
+    //copy constructor / assignment not implemented at the moment.
  
     //move constructor / assignment / swap defined only for releasing vectors with compatable settings
     //settings are compatable if their StoreHeader value is the same 
 /*  Constructors / Assignment */
 
 /*  Release and Deletion */
-    released_ptr release() requires store_header; //releases the data in the form of a released_ptr (typedef for owned_ptr<T[]>)
+
+    //releases the data in the form of a released_ptr / released_span (typedef for owned_ptr<T[]> / owned_span<T>)
+    released_ptr release() requires store_header; 
+    released_span release_span() requires store_header; 
     
     //releases a handle for the data containing the allocator, owned_ptr<T[]>, size, and capacity
     //the handle's destructor will destroy and deallocate the data properly
     data_handle release() requires (not store_header);
     
-    static void destroy_and_dellocate(released_ptr data) requires store_header; //destroys and deallocates the released data when it is no longer needed
+    //destroys and deallocates the released data when it is no longer needed
+    static void destroy_and_dellocate(released_ptr data) requires store_header; 
+    
+    //returns a released_ptr to element-wise copied array, including a new header
+    //equivalent to constructing new releasing_vector, reserving the exact size, copying all elements into it, then releasing
+    static released_ptr copy_data(const released_ptr& data) requires store_header and copy_constructible<T>;
+    
+    //returns the size or capacity of the data
+    static sz_t data_size(const released_ptr& data) require store_header;
+    static sz_t data_capacity(const released_ptr& data) require store_header;
 /*  Release and Deletion */
 
 /*  Additional Utilities */
@@ -101,8 +116,7 @@ API:
     explicit operator std::span<T>() const;
     std::span<T> to_span() const;
     
-    /* CString specific utilities */
- 
+    /* CString specific utilities */ 
     template <sz_t N>
     explicit (const char(&c_str)[N]) requires is_string; //string literal constructor
     
@@ -115,8 +129,7 @@ API:
     bool operator==(const char(&c_str)[N]);
     
     template<sz_t N>
-    bool operator==(const std::string& std_str);
-    
+    bool operator==(const std::string& std_str);  
     /* CString specific utilities */
 
 /*  Additional Utilities */
