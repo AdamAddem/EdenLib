@@ -18,8 +18,6 @@ namespace eden {
 *    -If true, max(8, sizeof(T)), bytes extra are allocated and stored. Can be inefficient for small arrays and/or small types.
 *    -If true, deallocation just requires the released pointer.
 *    -If false, the user will be handed a header upon release that will need to be stored.
-*  Allocator (default std::allocator<T>):
-*    -The allocator for the specified type.
 */
 template <
           bool StoreHeader = true,
@@ -75,7 +73,7 @@ class releasing_vector {
   requires store_header {
     assume_assert(data not_eq nullptr);
                          //https://wiki.c2.com/?ThreeStarProgrammer/
-    return *std::launder(reinterpret_cast<header**>(data - header_count));
+    return *std::launder((header**)(data - header_count));
   }
 
   [[nodiscard]] constexpr header*
@@ -87,7 +85,7 @@ class releasing_vector {
   get_header_ptr_location_from(T* data) noexcept
   requires store_header {
     assume_assert(data not_eq nullptr);
-    return std::launder(reinterpret_cast<header**>(data - header_count));
+    return std::launder((header**)(data - header_count));
   }
 
   [[nodiscard]] constexpr header**
@@ -158,7 +156,8 @@ class releasing_vector {
       ++i;
     }
     if constexpr (store_header)
-      *std::launder(reinterpret_cast<void**>(new_buff - header_count)) = header_pointer();
+      *std::launder(
+        (void**)(new_buff - header_count)) = header_pointer();
 
     destroy(); deallocate();
     m_begin = new_buff;
@@ -179,7 +178,7 @@ public:
     const_iterator() : m_ptr(nullptr) {}
     explicit const_iterator(T* ptr) : m_ptr(ptr) {}
 
-    [[nodiscard]] constexpr const_iterator&
+    constexpr const_iterator&
     operator=(const_iterator other) noexcept {
       m_ptr = other.m_ptr;
       return *this;
@@ -197,27 +196,27 @@ public:
     operator[](sz_t idx) const noexcept
     {return m_ptr[idx];}
 
-    [[nodiscard]] constexpr const_iterator&
+    constexpr const_iterator&
     operator++() noexcept
     {++m_ptr; return *this;}
 
-    [[nodiscard]] constexpr const_iterator
+    constexpr const_iterator
     operator++(int) noexcept
     {const_iterator tmp = *this; ++m_ptr; return tmp;}
 
-    [[nodiscard]] constexpr const_iterator&
+    constexpr const_iterator&
     operator--() noexcept
     {--m_ptr; return *this;}
 
-    [[nodiscard]] constexpr const_iterator
+    constexpr const_iterator
     operator--(int) noexcept
     {const_iterator tmp = *this; --m_ptr; return tmp;}
 
-    [[nodiscard]] constexpr const_iterator&
+    constexpr const_iterator&
     operator+=(sz_t n) noexcept
     {m_ptr += n; return *this;}
 
-    [[nodiscard]] constexpr const_iterator&
+    constexpr const_iterator&
     operator-=(sz_t n) noexcept
     {m_ptr -= n; return *this;}
 
@@ -247,7 +246,6 @@ public:
   private:
     T* m_ptr;
   };
-
   struct iterator {
     using iterator_category = std::contiguous_iterator_tag;
     using value_type        = std::remove_cv_t<T>;
@@ -256,7 +254,7 @@ public:
     iterator() : m_ptr(nullptr) {}
     explicit iterator(T* ptr) : m_ptr(ptr) {}
 
-    [[nodiscard]] constexpr iterator&
+    constexpr iterator&
     operator=(iterator other) noexcept {
       m_ptr = other.m_ptr;
       return *this;
@@ -274,27 +272,27 @@ public:
     operator[](sz_t idx) const noexcept
     {return m_ptr[idx];}
 
-    [[nodiscard]] constexpr iterator&
+    constexpr iterator&
     operator++() noexcept
     {++m_ptr; return *this;}
 
-    [[nodiscard]] constexpr iterator
+    constexpr iterator
     operator++(int) noexcept
     {iterator tmp = *this; ++m_ptr; return tmp;}
 
-    [[nodiscard]] constexpr iterator&
+    constexpr iterator&
     operator--() noexcept
     {--m_ptr; return *this;}
 
-    [[nodiscard]] constexpr iterator
+    constexpr iterator
     operator--(int) noexcept
     {iterator tmp = *this; --m_ptr; return tmp;}
 
-    [[nodiscard]] constexpr iterator&
+    constexpr iterator&
     operator+=(sz_t n) noexcept
     {m_ptr += n; return *this;}
 
-    [[nodiscard]] constexpr iterator&
+    constexpr iterator&
     operator-=(sz_t n) noexcept
     {m_ptr -= n; return *this;}
 

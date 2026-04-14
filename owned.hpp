@@ -235,7 +235,7 @@ struct ContainsIf<T, true> {T m;};
 template <class T, sz_t Extent = std::dynamic_extent>
 requires (Extent > 0)
 class owned_span {
-  static constexpr bool dynamicly_sized = Extent == std::dynamic_extent;
+  static constexpr bool dynamicly_sized = (Extent == std::dynamic_extent);
   static constexpr bool is_string = same_c<T, char>;
   static constexpr bool elements_comparable = requires (T a, T b) {a == b;};
 
@@ -243,6 +243,214 @@ class owned_span {
   [[no_unique_address]]
   ContainsIf<sz_t, dynamicly_sized> length;
 public:
+
+  struct const_iterator {
+    using iterator_category = std::contiguous_iterator_tag;
+    using value_type        = std::remove_cv_t<T>;
+    using element_type      = value_type;
+
+    const_iterator() : m_ptr(nullptr) {}
+    explicit const_iterator(T* ptr) : m_ptr(ptr) {}
+
+    constexpr const_iterator&
+    operator=(const_iterator other) noexcept {
+      m_ptr = other.m_ptr;
+      return *this;
+    }
+
+    [[nodiscard]] constexpr T*
+    operator->() const noexcept
+    {return m_ptr;}
+
+    [[nodiscard]] constexpr T&
+    operator*() const noexcept
+    {return *m_ptr;}
+
+    [[nodiscard]] constexpr T&
+    operator[](sz_t idx) const noexcept
+    {return m_ptr[idx];}
+
+    constexpr const_iterator&
+    operator++() noexcept
+    {++m_ptr; return *this;}
+
+    constexpr const_iterator
+    operator++(int) noexcept
+    {const_iterator tmp = *this; ++m_ptr; return tmp;}
+
+    constexpr const_iterator&
+    operator--() noexcept
+    {--m_ptr; return *this;}
+
+    constexpr const_iterator
+    operator--(int) noexcept
+    {const_iterator tmp = *this; --m_ptr; return tmp;}
+
+    constexpr const_iterator&
+    operator+=(sz_t n) noexcept
+    {m_ptr += n; return *this;}
+
+    constexpr const_iterator&
+    operator-=(sz_t n) noexcept
+    {m_ptr -= n; return *this;}
+
+    [[nodiscard]] friend constexpr std::ptrdiff_t
+    operator-(const_iterator lhs, const_iterator rhs) noexcept
+    {return lhs.m_ptr - rhs.m_ptr;}
+
+    [[nodiscard]] friend constexpr const_iterator
+    operator+(const_iterator lhs, sz_t n) noexcept
+    {return iterator(lhs.m_ptr + n);}
+
+    [[nodiscard]] friend constexpr const_iterator
+    operator+(sz_t n, const_iterator rhs) noexcept
+    {return iterator(rhs.m_ptr - n);}
+
+    [[nodiscard]] friend constexpr const_iterator
+    operator-(const_iterator lhs, sz_t n) noexcept
+    {return iterator(lhs.m_ptr - n);}
+
+    [[nodiscard]] friend constexpr bool
+    operator==(const const_iterator& a, const const_iterator& b) noexcept = default;
+
+    [[nodiscard]] constexpr auto
+    operator<=>(const const_iterator& other) const noexcept
+    {return m_ptr <=> other.m_ptr;}
+
+  private:
+    T* m_ptr;
+  };
+  struct iterator {
+    using iterator_category = std::contiguous_iterator_tag;
+    using value_type        = std::remove_cv_t<T>;
+    using element_type      = value_type;
+
+    iterator() : m_ptr(nullptr) {}
+    explicit iterator(T* ptr) : m_ptr(ptr) {}
+
+    constexpr iterator&
+    operator=(iterator other) noexcept {
+      m_ptr = other.m_ptr;
+      return *this;
+    }
+
+    [[nodiscard]] constexpr T*
+    operator->() const noexcept
+    {return m_ptr;}
+
+    [[nodiscard]] constexpr T&
+    operator*() const noexcept
+    {return *m_ptr;}
+
+    [[nodiscard]] constexpr T&
+    operator[](sz_t idx) const noexcept
+    {return m_ptr[idx];}
+
+    constexpr iterator&
+    operator++() noexcept
+    {++m_ptr; return *this;}
+
+    constexpr iterator
+    operator++(int) noexcept
+    {iterator tmp = *this; ++m_ptr; return tmp;}
+
+    constexpr iterator&
+    operator--() noexcept
+    {--m_ptr; return *this;}
+
+    constexpr iterator
+    operator--(int) noexcept
+    {iterator tmp = *this; --m_ptr; return tmp;}
+
+    constexpr iterator&
+    operator+=(sz_t n) noexcept
+    {m_ptr += n; return *this;}
+
+    constexpr iterator&
+    operator-=(sz_t n) noexcept
+    {m_ptr -= n; return *this;}
+
+    [[nodiscard]] explicit constexpr
+    operator const_iterator() const noexcept
+    {return const_iterator(m_ptr);}
+
+    [[nodiscard]] friend constexpr std::ptrdiff_t
+    operator-(iterator lhs, iterator rhs) noexcept
+    {return lhs.m_ptr - rhs.m_ptr;}
+
+    [[nodiscard]] friend constexpr iterator
+    operator+(iterator lhs, sz_t n) noexcept
+    {return iterator(lhs.m_ptr + n);}
+
+    [[nodiscard]] friend constexpr iterator
+    operator+(sz_t n, iterator rhs) noexcept
+    {return iterator(rhs.m_ptr + n);}
+
+    [[nodiscard]] friend constexpr iterator
+    operator-(iterator lhs, sz_t n) noexcept
+    {return iterator(lhs.m_ptr - n);}
+
+    [[nodiscard]] friend constexpr bool
+    operator==(const iterator& a, const iterator& b) noexcept = default;
+
+    [[nodiscard]] constexpr auto
+    operator<=>(const iterator& other) const noexcept
+    {return m_ptr <=> other.m_ptr;}
+
+  private:
+    T* m_ptr;
+  };
+
+  using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+  using reverse_iterator = std::reverse_iterator<iterator>;
+
+  [[nodiscard]] constexpr iterator
+  begin() noexcept
+  {return iterator(internal);}
+
+  [[nodiscard]] constexpr const_iterator
+  begin() const noexcept
+  {return const_iterator(internal);}
+
+  [[nodiscard]] constexpr const_iterator
+  cbegin() const noexcept
+  {return const_iterator(internal);}
+
+  [[nodiscard]] constexpr reverse_iterator
+  rbegin() noexcept
+  {return reverse_iterator(end());}
+
+  [[nodiscard]] constexpr const_reverse_iterator
+  rbegin() const noexcept
+  {return const_reverse_iterator(cend());}
+
+  [[nodiscard]] constexpr const_reverse_iterator
+  crbegin() const noexcept
+  {return const_reverse_iterator(cend());}
+
+  [[nodiscard]] constexpr iterator
+  end() noexcept
+  {return iterator(internal + size());}
+
+  [[nodiscard]] constexpr const_iterator
+  end() const noexcept
+  {return const_iterator(internal + size());}
+
+  [[nodiscard]] constexpr const_iterator
+  cend() const noexcept
+  {return const_iterator(internal + size());}
+
+  [[nodiscard]] constexpr reverse_iterator
+  rend() noexcept
+  {return reverse_iterator(begin());}
+
+  [[nodiscard]] constexpr const_reverse_iterator
+  rend() const noexcept
+  {return const_reverse_iterator(cbegin());}
+
+  [[nodiscard]] constexpr const_reverse_iterator
+  crend() const noexcept
+  {return const_reverse_iterator(cbegin());}
 
   constexpr owned_span() noexcept
   requires dynamicly_sized
@@ -278,12 +486,13 @@ public:
 
   template <sz_t OtherExtent>
   constexpr owned_span(owned_span<T, OtherExtent>&& other) noexcept
-  requires dynamicly_sized
+  requires (dynamicly_sized)
   : internal(other.internal) {
     other.internal = nullptr;
     if constexpr (other.dynamicly_sized)
       length.m = other.length.m;
-    else length.m = OtherExtent;
+    else
+      length.m = OtherExtent;
   }
 
   constexpr owned_span(owned_span&& other) noexcept
@@ -323,6 +532,18 @@ public:
     return *this;
   }
 
+  [[nodiscard]] constexpr T&
+  front() noexcept {return *internal;}
+
+  [[nodiscard]] constexpr const T&
+  front() const noexcept {return *internal;}
+
+  [[nodiscard]] constexpr T&
+  back() noexcept {return *(internal + (size() - 1));}
+
+  [[nodiscard]] constexpr const T&
+  back() const noexcept {return *(internal + (size() - 1));}
+
   [[nodiscard]] constexpr T*
   get() noexcept {return internal;}
 
@@ -343,6 +564,10 @@ public:
       return length.m;
     else return Extent;
   }
+
+  [[nodiscard]] constexpr bool
+  empty() const noexcept
+  {return size() == 0;}
 
   [[nodiscard]] constexpr bool
   operator==(const decltype(nullptr)) const noexcept
