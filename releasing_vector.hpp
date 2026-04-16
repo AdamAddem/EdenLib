@@ -606,6 +606,13 @@ public:
     ::operator delete(header_ptr, static_cast<std::align_val_t>(alignof(header)));
   }
 
+  static constexpr void
+  destroy_and_deallocate(released_span data)
+  noexcept(nothrow_deallocating and nothrow_destruct)
+  requires store_header {
+    return destroy_and_deallocate(released_ptr(data.get()));
+  }
+
   //investigate possible bug involving string specialization
   //this might be adding a redundant null terminator
   static constexpr released_ptr

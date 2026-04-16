@@ -520,7 +520,7 @@ public:
   operator=(owned_span&& other) noexcept
   requires (not dynamicly_sized) {
     internal = other.internal;
-    other.internal = false;
+    other.internal = nullptr;
     return *this;
   }
 
