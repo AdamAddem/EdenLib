@@ -352,8 +352,29 @@ public:
     }
   };
 
-  using released_ptr = owned_ptr<T[]>;
-  using released_span = owned_span<T>;
+  struct released_ptr : owned_ptr<T[]> {
+    constexpr void destroy_and_deallocate()
+    noexcept(nothrow_deallocating and nothrow_destruct)
+    requires store_header
+    {releasing_vector::destroy_and_deallocate(std::move(*this));}
+    constexpr released_ptr() noexcept = default;
+
+    [[deprecated("Ensure that this constructor is receiving a pointer to previously released vector data.")]]
+    explicit constexpr
+    released_ptr(T* previously_released_this_is_dangerous) noexcept
+    : owned_ptr<T[]>(previously_released_this_is_dangerous) {}
+  };
+
+  struct released_span : owned_span<T> {
+    constexpr void destroy_and_deallocate()
+    noexcept(nothrow_deallocating and nothrow_destruct)
+    requires store_header
+    {releasing_vector::destroy_and_deallocate(std::move(*this));}
+
+    constexpr released_span() noexcept = default;
+    constexpr released_span(released_ptr&& cstr) noexcept
+    requires is_string : owned_span<T>(std::move(cstr)){}
+  };
 
   constexpr releasing_vector()
   noexcept(std::is_nothrow_default_constructible_v<Allocator>)
