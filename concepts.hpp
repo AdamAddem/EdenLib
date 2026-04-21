@@ -24,6 +24,44 @@ concept allocator_for_c = requires (Alloc a, T* p, std::size_t n) {
   Alloc(a);
 };
 
+//Forward Tuple implementation was shamelessly stolen from someone on stackoverflow
+//Thank you!
+namespace detail {
+    template <std::size_t Index, typename T>
+    class TupleElement {
+        T value;
+    protected:
+        TupleElement(const T& val) : value(val) {}
+
+        template <std::size_t I>
+        constexpr std::enable_if_t<I == Index, T&>
+        get() { return value; }
+
+        template <std::size_t I>
+        constexpr std::enable_if_t<I == Index, const T&>
+        get() const { return value; }
+    };
+
+    template <typename Ind, typename... Ts>
+    class TupleImpl;
+
+    template <std::size_t... Is, typename... Ts>
+    class TupleImpl<std::index_sequence<Is...>, Ts...> : TupleElement<Is, Ts>... {
+    public:
+        constexpr TupleImpl(const Ts&... args)
+        : TupleElement<Is, Ts>(args)... {}
+        using TupleElement<Is, Ts>::get...;
+    };
+}
+
+template <typename... Ts>
+struct ForwardTuple : detail::TupleImpl<std::index_sequence_for<Ts...>, Ts...> {
+    using detail::TupleImpl<std::index_sequence_for<Ts...>, Ts...>::TupleImpl;
+};
+
+template <typename... Ts>
+ForwardTuple(const Ts&...) -> ForwardTuple<Ts...>;
+
 template<sz_t N>
 struct TemplateString {
   std::array<char, N> data;
@@ -270,22 +308,84 @@ public:
 
 template <class T>
 concept registered_type = std::derived_from<T, type<T>> or
-  requires (T& a) {
+  requires (T a) {
     []<TemplateString N>(type<T, N>){}(a);
   };
 
 template <class T>
-concept type_instance = requires (T& a) {
+concept type_instance = requires (T a) {
   []<typename U, TemplateString str>(type<U, str>) consteval {
   }(a);
 };
 
+template <class T>
+extern T extern_never_defined;
 
-struct Example : type<Example, "Example"> {
-
+template <typename T>
+union UnionWithCharArray {
+  alignas(T) char a[sizeof(T)];
+  T t;
 };
 
+template <sz_t I, class... Args>
+static constexpr void assign_offsets(sz_t* item) {
+  if constexpr (I < sizeof...(Args)) {
+    using tuple_type = ForwardTuple<Args...>;
+    *item = [] {
+      auto& o = extern_never_defined<UnionWithCharArray<tuple_type>>;
+      for (sz_t i = 0;; ++i)
+        if (std::addressof(o.t.template get<I>()) == static_cast<void*>(o.a + i))
+          return i;
+    }();
 
+    assign_offsets<I + 1, Args...>(item + 1);
+  }
+}
+
+template<class... Args>
+static constexpr auto offsets() -> const sz_t(&)[sizeof...(Args)] {
+  struct Bullshit {
+    sz_t arr[sizeof...(Args)];
+
+    consteval Bullshit() {
+      assign_offsets<0, Args...>(arr);
+    }
+  };
+
+  static constexpr Bullshit offsets;
+  return offsets.arr;
+}
+
+template <class T, TemplateString name_str, class... Members>
+struct class_reflection {
+  static constexpr sz_t N = sizeof...(Members);
+  static constexpr const char* name = name_str.data.data();
+  using type = T;
+  using tuple_type = ForwardTuple<typename Members::type...>;
+
+  static consteval auto member_names() -> const char* const (&)[N]{
+    static constexpr const char *arr[N] = {Members::name... };
+    return arr;
+  }
+  static consteval auto type_offsets() {return offsets<typename Members::type...>();}
+
+  template <sz_t I>
+  static constexpr void for_each_h(const char* obj, auto&& callable) {
+    if constexpr(I < sizeof...(Members)) {
+      using element_type = std::remove_reference_t<decltype(extern_never_defined<tuple_type>.template get<I>())>;
+      callable(
+        member_names()[I],
+        *reinterpret_cast<const element_type*>(obj + type_offsets()[I])
+        );
+      for_each_h<I + 1>(obj, std::forward<decltype(callable)>(callable));
+    }
+  }
+
+  static constexpr void for_each(const T& obj, auto&& callable) {
+    const auto ptr = reinterpret_cast<const char*>(std::addressof(obj));
+    for_each_h<0>(ptr, std::forward<decltype(callable)>(callable));
+  }
+};
 
 template <i64_t N, TemplateString str, sz_t str_size = str.data.size()>
 [[nodiscard]] consteval auto append_number_to_literal_helper_func() noexcept

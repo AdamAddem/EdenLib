@@ -352,26 +352,32 @@ public:
     }
   };
 
-  struct released_ptr : owned_ptr<T[]> {
+  struct released_ptr : public owned_ptr<T[]> {
     constexpr void destroy_and_deallocate()
     noexcept(nothrow_deallocating and nothrow_destruct)
     requires store_header
     {releasing_vector::destroy_and_deallocate(std::move(*this));}
-    constexpr released_ptr() noexcept = default;
 
-    [[deprecated("Ensure that this constructor is receiving a pointer to previously released vector data.")]]
+    constexpr released_ptr() noexcept = default;
     explicit constexpr
-    released_ptr(T* previously_released_this_is_dangerous) noexcept
-    : owned_ptr<T[]>(previously_released_this_is_dangerous) {}
+    released_ptr(T* previously_released_data) noexcept
+    : owned_ptr<T[]>(previously_released_data) {}
+
+    //note that this method is more expensive than a typical size() call
+    [[nodiscard]] constexpr sz_t
+    size() const noexcept
+    {return releasing_vector::data_size(*this);}
   };
 
-  struct released_span : owned_span<T> {
+  struct released_span : public owned_span<T> {
     constexpr void destroy_and_deallocate()
     noexcept(nothrow_deallocating and nothrow_destruct)
     requires store_header
     {releasing_vector::destroy_and_deallocate(std::move(*this));}
 
-    constexpr released_span() noexcept = default;
+    constexpr released_span() noexcept requires store_header = default;
+    constexpr released_span(released_ptr previously_released_data, sz_t sz) noexcept
+    requires store_header : owned_span<T>(std::move(previously_released_data), sz) {}
     constexpr released_span(released_ptr&& cstr) noexcept
     requires is_string : owned_span<T>(std::move(cstr)){}
   };
@@ -478,14 +484,14 @@ public:
   [[nodiscard]] constexpr T&
   at(sz_t pos) {
     if (m_begin + pos >= m_size)
-      throw std::out_of_range(std::format("Element access at index {} eden::releasing_vector with size of {}.", pos, size()));
+      throw std::out_of_range(std::format("Element access at index {} in eden::releasing_vector with size of {}.", pos, size()));
     return *(m_begin + pos);
   }
 
   [[nodiscard]] constexpr const T&
   at(sz_t pos) const {
     if (m_begin + pos >= m_size)
-      throw std::out_of_range(std::format("Element access at index {} eden::releasing_vector with size of {}.", pos, size()));
+      throw std::out_of_range(std::format("Element access at index {} in eden::releasing_vector with size of {}.", pos, size()));
     return *(m_begin + pos);
   }
 
