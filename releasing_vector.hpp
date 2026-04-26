@@ -404,7 +404,7 @@ public:
     m_cap = m_begin + h->capacity;
     if constexpr (is_string)
       pop_back();
-    std::destroy(h);
+    std::destroy_at(h);
   }
 
   constexpr explicit
@@ -661,13 +661,13 @@ public:
 
   static constexpr sz_t
   data_size(const released_ptr& data) noexcept {
-    auto header_ptr = get_header_pointer_from(data.get());
+    auto header_ptr = get_header_pointer_from(const_cast<T*>(data.get()));
     return header_ptr->size;
   }
 
   static constexpr sz_t
   data_capacity(const released_ptr& data) noexcept {
-    auto header_ptr = get_header_pointer_from(data.get());
+    auto header_ptr = get_header_pointer_from(const_cast<T*>(data.get()));
     return header_ptr->capacity;
   }
 
@@ -811,6 +811,10 @@ public:
     alloc_traits::construct(m_alloc, m_size, std::forward<Args>(args)...);
     return *(m_size++);
   }
+
+  constexpr void push_back(const T& value)
+  noexcept(std::is_nothrow_copy_constructible_v<T>)
+  requires std::is_copy_constructible_v<T> {emplace_back(std::forward<const T>(value));}
 
   constexpr void push_back(T&& value)
   noexcept(std::is_nothrow_move_constructible_v<T>)
