@@ -1,10 +1,9 @@
 #pragma once
 #include "typedefs.hpp"
+#include "string_utils.hpp"
 
-#include <algorithm>
 #include <array>
 #include <concepts>
-#include <charconv>
 #include <cstring>
 #include <memory>
 #include <type_traits>
@@ -62,30 +61,7 @@ struct ForwardTuple : detail::TupleImpl<std::index_sequence_for<Ts...>, Ts...> {
 template <typename... Ts>
 ForwardTuple(const Ts&...) -> ForwardTuple<Ts...>;
 
-template<sz_t N>
-struct TemplateString {
-  std::array<char, N> data;
-  consteval TemplateString(const char (&str)[N]) {
-    std::copy_n(str, N, data.begin());
-  }
 
-  template<sz_t OtherN>
-  consteval bool
-  operator==(const TemplateString<OtherN>& other) const noexcept {
-    if constexpr (N not_eq OtherN)
-      return false;
-    else
-      return data == other.data;
-  }
-
-  static consteval sz_t size() noexcept {return N - 1;}
-};
-
-template<>
-struct TemplateString<0> {
-  std::array<char, 1> data{'\0'};
-  static consteval sz_t size() noexcept {return 1;}
-};
 
 template <class T, TemplateString name_str = TemplateString<0>{}>
 struct type {
@@ -318,6 +294,8 @@ concept type_instance = requires (T a) {
   }(a);
 };
 
+
+
 template <class T>
 extern T extern_never_defined;
 
@@ -328,7 +306,7 @@ union UnionWithCharArray {
 };
 
 template <sz_t I, class... Args>
-static constexpr void assign_offsets(sz_t* item) {
+static constexpr void assign_offsets(sz_t* item) noexcept {
   if constexpr (I < sizeof...(Args)) {
     using tuple_type = ForwardTuple<Args...>;
     *item = [] {
@@ -343,7 +321,7 @@ static constexpr void assign_offsets(sz_t* item) {
 }
 
 template<class... Args>
-static constexpr auto offsets() -> const sz_t(&)[sizeof...(Args)] {
+static constexpr auto offsets() noexcept -> const sz_t(&)[sizeof...(Args)] {
   struct Bullshit {
     sz_t arr[sizeof...(Args)];
 
@@ -387,25 +365,7 @@ struct class_reflection {
   }
 };
 
-template <i64_t N, TemplateString str, sz_t str_size = str.data.size()>
-[[nodiscard]] consteval auto append_number_to_literal_helper_func() noexcept
--> const char (&)[str_size+22] {
-  struct scuffed {
-    char arr[str_size+22]{};
-    consteval scuffed() {
-      std::copy_n(str.data.data(), str_size, arr);
-      arr[str_size-1] = '<';
-      auto end = std::to_chars(&arr[str_size], &arr[str_size+20], N).ptr;
-      *end = '>';
-      *(++end) = '\0';
-    }
-  };
-  static constexpr scuffed x;
-  return x.arr;
-}
 
-template <i64_t N, TemplateString str, sz_t str_size = str.data.size()>
-static constexpr const char(&append_number_to_literal)[str_size+22] = append_number_to_literal_helper_func<N, str>();
 
 template <class T> concept pointer_c = std::is_pointer_v<T>;
 template <class T> concept enum_c = std::is_enum_v<T>;

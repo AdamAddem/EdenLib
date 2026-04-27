@@ -8,7 +8,7 @@ This is a collection of containers, functions, and utilities that i've created f
 ---
 Here is a quick summary of the smaller headers:
 - arena.hpp: arena allocator with a link to another arena if capacity fills.
-- assume_assert.hpp: shorthand for an assertion followed by an [[assume]] attribute.
+- macros.hpp: has some helpful macros, including a shorthand for an assertion followed by an [[assume]] attribute and a portable restrict macro.
 - null_conditional_chaining.hpp: macro and template based implementation of a null conditional operator.
   - ```cpp
     First* first = getfirst(arg1);
@@ -34,8 +34,14 @@ Here is a quick summary of the smaller headers:
   - Flags that can be used across my library for various purposes.
 - typedefs.hpp
   - Shortened type names for common types.
+- enum_utils.hpp
+  - Provides enumBetween, a utility allowing for compile or runtime checking of the ordering of enums.
+  - Whether the upper or lower bounds are inclusive or exclusive can be changed (default inclusive for both).
+- string_utils.hpp
+  - Provides the TemplateString class, a way of creating and manipulating strings at compile time.
+  - Provides stpcpy, a portable version of POSIX's stpcpy.
 ---
-### Owned Pointer
+### Owned Pointer / Span
 A version of unique_ptr without deletion. <br>
 Serves primarily to communicate the intent of ownership, without some of the drawbacks of unique_ptr.
 - unique_ptr sometimes requires types to be complete even when they really don't need to be, making idioms like PIMPL harder.
@@ -50,13 +56,12 @@ c_str specialization provided, with more utilities:
 - operator std::string
 - length()
 
-### Owned Span
-Similar to owned_ptr, but for span.
+Owned span is similar, but of course as a span.
 
 ### Releasing Vector
 An implementation of a vector able to 'release' ownership over its internal buffer. <br>
 If the data is released, but needs to be accessed as if it were a vector again, a new releasing_vector can claim ownership. <br>
-When the data is no longer needed, the pointer can be passed to a static method which will handle the destruction and deallocation. <br>
+When the data is no longer needed, the pointer can handle its own destruction through a method. <br>
 Iterator invalidation rules are consistent with std::vector. 
 - After release iterators are guaranteed remain valid, provided the data is not reclaimed by another vector.
 
@@ -91,7 +96,7 @@ API:
 
 /*  Release and Deletion */
 
-    //releases the data in the form of a released_ptr / released_span (typedef for owned_ptr<T[]> / owned_span<T>)
+    //releases the data in the form of a released_ptr / released_span
     released_ptr release() requires store_header; 
     released_span release_span() requires store_header; 
     

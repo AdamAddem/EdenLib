@@ -23,6 +23,7 @@ enumBetween(T value, T lower_bound, T higher_bound) noexcept {
   }();
 }
 
+
 template <enum_c T>
 [[nodiscard]] consteval bool
 enumLessThan(T lower, T higher) {
