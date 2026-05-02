@@ -8,7 +8,7 @@ This is a collection of containers, functions, and utilities that i've created f
 ---
 Here is a quick summary of the smaller headers:
 - arena.hpp: arena allocator with a link to another arena if capacity fills.
-- macros.hpp: has some helpful macros, including a shorthand for an assertion followed by an [[assume]] attribute and a portable restrict macro.
+- macros.hpp: has macros that generalize some compiler specific features (__restrict, nonnull, etc). If they aren't supported, then macro is empty.
 - null_conditional_chaining.hpp: macro and template based implementation of a null conditional operator.
   - ```cpp
     First* first = getfirst(arg1);

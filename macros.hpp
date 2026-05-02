@@ -3,15 +3,33 @@
 
 #define assume_assert(always_true) assert((always_true)); [[assume((always_true))]]
 
-#ifdef __GNUC__
+#ifdef __GNUG__
 #define eden_restrict __restrict
 #elif _MSC_VER
 #define eden_restrict __restrict
 #else
-static_assert(false,
-  "\nIf you are reading this, the compiler you are using does not support __restrict.\n"
-  "This is fine, just know that some things may be less efficient.\n"
-  "If your compiler does support some form of restrict, add it to the macro below.\n"
-  "Delete this static assert to continue.");
 #define eden_restrict
+#endif
+
+
+#ifdef __clang__
+#define eden_nonull_args [[gnu::nonnull]]
+#define eden_nonnull_args(...) [[gnu::nonnull(__VA_ARGS__)]]
+#define eden_notnullptr _Nonnull
+#define eden_return_nonnull [[gnu::returns_nonnull]]
+#define eden_cstr_arg(unsupported_soz)
+
+#elifdef __GNUG__
+#define eden_nonull_args [[gnu::nonnull]]
+#define eden_nonnull_args(...) [[gnu::nonnull(__VA_ARGS__)]]
+#define eden_notnullptr
+#define eden_return_nonnull [[gnu::returns_nonnull]]
+#define eden_cstr_arg(onebased_arg_idx) [[gnu::null_terminated_string_arg(onebased_arg_idx)]]
+
+#else
+#define eden_nonull_args
+#define eden_nonnull_args(...)
+#define eden_notnullptr
+#define eden_return_nonnull
+#define eden_cstr_arg(unsupported_soz)
 #endif
