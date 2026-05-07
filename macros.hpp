@@ -1,7 +1,9 @@
 #pragma once
 #include <cassert>
+#include <utility>
 
-#define assume_assert(always_true) assert((always_true)); [[assume((always_true))]]
+#define assume_assert(always_true) [[assume((always_true))]]; assert((always_true))
+#define eden_unreachable(message) assert(false and message), std::unreachable()
 
 #ifdef __GNUG__
 #define eden_restrict __restrict
