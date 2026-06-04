@@ -2,8 +2,8 @@
 #include <cassert>
 #include <utility>
 
-#define assume_assert(always_true) [[assume((always_true))]]; assert((always_true))
-#define eden_unreachable(message) assert(false and message), std::unreachable()
+#define assume_assert(always_true) if(true) {[[assume((always_true))]]; assert((always_true));} else void{}
+#define eden_unreachable(message) if(true) {assert(false and message); std::unreachable();} else (void)0
 
 #ifdef __GNUG__
 #define eden_restrict __restrict

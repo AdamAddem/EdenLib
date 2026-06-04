@@ -40,6 +40,9 @@ Here is a quick summary of the smaller headers:
 - string_utils.hpp
   - Provides the TemplateString class, a way of creating and manipulating strings at compile time.
   - Provides stpcpy, a portable version of POSIX's stpcpy.
+- vector16.hpp
+  - Vector using u32's for size and capacity, lowering the vector's overhead to 16 bytes.
+  - Has the same QOL additions as releasing vector minus the releasing functionality.
 ---
 ### Owned Pointer / Span
 A version of unique_ptr without deletion. <br>

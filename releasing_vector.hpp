@@ -5,19 +5,18 @@
 #include "type_flags.hpp"
 #include "typedefs.hpp"
 #include <format>
-#include <iostream>
 #include <memory>
 #include <ranges>
 
 namespace eden {
 /*
-*  ExpansionMult (default 2):
-*    -The multiplier applied to the capacity everytime it the vector must expand.
 *  StoreHeader (default true):
 *    -Determines whether the vector allocates a pointer to a header before the data.
 *    -If true, max(8, sizeof(T)), bytes extra are allocated and stored. Can be inefficient for small arrays and/or small types.
 *    -If true, deallocation just requires the released pointer.
 *    -If false, the user will be handed a header upon release that will need to be stored.
+*  ExpansionMult (default 2):
+*    -The multiplier applied to the capacity everytime the vector must expand.
 */
 template <
           bool StoreHeader = true,
@@ -36,9 +35,9 @@ template <class T, releasing_vector_settings settings = releasing_vector_setting
 requires (settings.is_string ? (sizeof(T) == 1 and type<T>::is_integral) : true) and
          (std::allocator_traits<Allocator>::propagate_on_container_move_assignment::value)
 class releasing_vector {
-  static constexpr bool is_string = decltype(settings)::is_string;
-  static constexpr sz_t expansion_mult = decltype(settings)::expansion_mult;
-  static constexpr bool store_header = decltype(settings)::store_header;
+  static constexpr bool is_string = settings.is_string;
+  static constexpr sz_t expansion_mult = settings.expansion_mult;
+  static constexpr bool store_header = settings.store_header;
   static constexpr bool trivially_destructible = std::is_trivially_destructible_v<T>;
 
   struct header {
@@ -147,7 +146,8 @@ class releasing_vector {
   }
 
   constexpr void expand_to(sz_t count)
-  noexcept(std::is_nothrow_copy_constructible_v<T>) {
+  noexcept(std::is_nothrow_copy_constructible_v<T>)
+  requires std::is_constructible_v<T, decltype(std::move_if_noexcept(std::declval<T>()))> {
     assert(count >= size());
     T* new_buff = m_alloc.allocate(count + header_count) + header_count;
     auto i{0uz};
@@ -167,8 +167,8 @@ class releasing_vector {
 
 public:
 
-  template<releasing_vector_settings second>
-  static constexpr bool compatible_settings = store_header == second.store_header;
+  template<releasing_vector_settings other>
+  static constexpr bool compatible_settings = store_header == other.store_header and is_string == other.is_string;
 
   struct const_iterator {
     using iterator_category = std::contiguous_iterator_tag;
@@ -567,6 +567,11 @@ public:
   back() const noexcept
   {assume_assert(m_size); return *(m_size - 1);}
 
+
+  // If this is a string, this will NOT return a null terminated string.
+  [[nodiscard]] constexpr T*
+  data() noexcept { return m_begin; }
+
   [[nodiscard]] constexpr released_ptr
   release() noexcept
   requires store_header {
@@ -673,31 +678,31 @@ public:
 
   [[nodiscard]] constexpr explicit
   operator std::span<T>() const noexcept
-  {return std::span(m_begin, size());}
+  { return std::span(m_begin, size()); }
 
   [[nodiscard]] constexpr std::span<T>
   to_span() const noexcept
-  {return static_cast<std::span<T>>(*this);}
+  { return (*this).operator std::span<T>(); }
 
   [[nodiscard]] constexpr
   operator std::string_view() const noexcept
   requires is_string
-  {return std::string_view(m_begin, size());}
+  { return std::string_view(m_begin, size()); }
 
   [[nodiscard]] constexpr std::string_view
   to_stringview() const noexcept
   requires is_string
-  {return static_cast<std::string_view>(*this);}
+  { return (*this).operator std::string_view(); }
 
   [[nodiscard]] constexpr explicit
   operator std::string() const noexcept
   requires is_string
-  {return std::string(m_begin, size());}
+  { return std::string(m_begin, size()); }
 
   [[nodiscard]] constexpr std::string
   to_stdstring() const noexcept
   requires is_string
-  {return static_cast<std::string>(*this);}
+  { return (*this).operator std::string(); }
 
   template <sz_t N>
   [[nodiscard]] constexpr bool
@@ -718,20 +723,9 @@ public:
   }
 
   [[nodiscard]] constexpr bool
-  operator==(const std::string& std_str) noexcept
-  requires is_string {
-    const sz_t sz = size();
-    if (std_str.size() not_eq sz)
-      return false;
-
-    auto i{0uz};
-    while (i < sz) {
-      if (m_begin[i] not_eq std_str[i])
-        return false;
-      ++i;
-    }
-    return true;
-  }
+  operator==(const std::string& std_str) const noexcept
+  requires is_string
+  { return to_stringview() == std::string_view(std_str); }
 
   [[nodiscard]] constexpr bool
   empty() const noexcept
@@ -764,8 +758,8 @@ public:
 
     const auto num_default{count - size()};
     auto i{0uz};
-    while (i < num_default)
-      alloc_traits::construct(m_alloc, m_size + i++);
+    while (i++ < num_default)
+      alloc_traits::construct(m_alloc, m_size++);
   }
 
   constexpr void resize(sz_t count, const T& value) noexcept
@@ -784,8 +778,8 @@ public:
 
     const auto num_default{count - size()};
     auto i{0uz};
-    while (i < num_default)
-      alloc_traits::construct(m_alloc, m_size + i++, value);
+    while (i++ < num_default)
+      alloc_traits::construct(m_alloc, m_size++, value);
   }
 
   [[nodiscard]] constexpr sz_t
@@ -822,7 +816,7 @@ public:
 
   constexpr void pop_back()
   noexcept(nothrow_destruct)
-  {assume_assert(m_begin); assume_assert(m_size not_eq m_begin); alloc_traits::destroy(m_alloc, m_size--);}
+  {assume_assert(m_begin); assume_assert(m_size not_eq m_begin); alloc_traits::destroy(m_alloc, --m_size);}
 };
 
 using releasing_string = releasing_vector<char, releasing_vector_settings<true, 2, true>{}>;
