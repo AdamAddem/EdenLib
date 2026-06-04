@@ -130,8 +130,8 @@ class releasing_vector {
 
   constexpr void destroy()
   noexcept(nothrow_destruct) {
-    if (m_begin == nullptr)
-      return;
+    if (m_begin == nullptr) return;
+
     while (m_size not_eq m_begin)
       alloc_traits::destroy(m_alloc, --m_size);
   }
@@ -163,6 +163,16 @@ class releasing_vector {
     m_begin = new_buff;
     m_size = m_begin + i;
     m_cap = m_begin + count;
+  }
+
+  constexpr void destroy_n_backwards(sz_t n)
+  noexcept(nothrow_destruct) {
+    assume_assert(m_begin); assert(size() >= n); assert(n < std::numeric_limits<sz_t>::max());
+    ++n;
+    while (n > 1) {
+      alloc_traits::destroy(m_alloc, --m_size);
+      --n;
+    }
   }
 
 public:
@@ -748,10 +758,8 @@ public:
       return allocate_and_construct(count);
 
     const sz_t current_size = size();
-    if (current_size == count)
-      return;
-    if (current_size > count)
-      return expand_to(count);
+    if (current_size >= count)
+      return destroy_n_backwards(current_size - count);
 
     if (capacity() < count)
       expand_to(count);
@@ -768,10 +776,8 @@ public:
       return allocate_and_construct(count, value);
 
     const sz_t current_size = size();
-    if (current_size == count)
-      return;
-    if (current_size > count)
-      return expand_to(count);
+    if (current_size >= count)
+      return destroy_n_backwards(current_size - count);
 
     if (capacity() < count)
       expand_to(count);

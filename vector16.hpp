@@ -6,6 +6,7 @@
 
 #include <format>
 #include <memory>
+#include <print>
 #include <ranges>
 
 namespace eden {
@@ -75,11 +76,16 @@ class vector16 {
 
   constexpr void expand_to(u32_t count)
   noexcept(std::is_nothrow_copy_constructible_v<T>)
-  requires std::is_constructible_v<T, decltype(std::move_if_noexcept(std::declval<T>()))> {
+  requires (move_constructible_c<T> or copy_constructible_c<T>) {
     assume_assert(count >= m_size);
+    if (count < m_cap) {
+      std::print("It seems like eden::vector16 overflowed. Old capacity: {} attempted to expand to {}.", m_cap, count);
+      eden_unreachable("oopsie!");
+    }
+
     T* new_buff = m_alloc.allocate(count);
     auto i{0uz};
-    while ((m_begin + i) not_eq m_size) {
+    while (i < m_size) {
       alloc_traits::construct(m_alloc, new_buff + i, std::move_if_noexcept(*(m_begin + i)));
       ++i;
     }
@@ -88,6 +94,16 @@ class vector16 {
     m_begin = new_buff;
     m_size = m_begin + i;
     m_cap = m_begin + count;
+  }
+
+  constexpr void destroy_n_backwards(u32_t n)
+  noexcept(nothrow_destruct) {
+    assume_assert(m_begin); assert(m_size >= n); assert(n < std::numeric_limits<u32_t>::max());
+    ++n;
+    while (n > 1) {
+      alloc_traits::destroy(m_alloc, --m_size);
+      --n;
+    }
   }
 
 public:
@@ -516,10 +532,8 @@ public:
     if (m_begin == nullptr)
       return allocate_and_construct_with(count);
 
-    if (m_size == count)
-      return;
-    if (m_size > count)
-      return expand_to(count);
+    if (m_size >= count)
+      return destroy_n_backwards(m_size - count);
 
     if (m_cap < count)
       expand_to(count);
@@ -533,10 +547,8 @@ public:
     if (m_begin == nullptr)
       return allocate_and_construct(count, value);
 
-    if (m_size == count)
-      return;
-    if (m_size > count)
-      return expand_to(count);
+    if (m_size >= count)
+      return destroy_n_backwards(m_size - count);
 
     if (capacity() < count)
       expand_to(count);
