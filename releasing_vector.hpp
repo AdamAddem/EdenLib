@@ -58,14 +58,19 @@ class releasing_vector {
     not store_header ? 0 : (
     Tsz >= ptr_size ? 1 : (ptr_size + Tsz - 1) / Tsz);
 
+  static constexpr bool default_constructible = std::is_default_constructible_v<T>;
+  static constexpr bool move_constructible = std::is_move_constructible_v<T>;
+  static constexpr bool copy_constructible = std::is_copy_constructible_v<T>;
+  static constexpr bool nothrow_default_constructible = std::is_nothrow_default_constructible_v<T>;
+  static constexpr bool nothrow_move_construct = std::is_nothrow_move_constructible_v<T>;
   static constexpr bool nothrow_copy_construct = std::is_nothrow_copy_constructible_v<T>;
 
   [[no_unique_address]] Allocator m_alloc;
   using alloc_traits = std::allocator_traits<Allocator>;
   static constexpr bool stateless_allocator = std::allocator_traits<Allocator>::is_always_equal;
-  static constexpr bool nothrow_destruct = noexcept(alloc_traits::destroy(m_alloc, static_cast<T*>(0)));
+  static constexpr bool nothrow_destruct = noexcept(alloc_traits::destroy(m_alloc, static_cast<T*>(nullptr)));
   static constexpr bool nothrow_allocating = noexcept(m_alloc.allocate(1));
-  static constexpr bool nothrow_deallocating = noexcept(m_alloc.deallocate(static_cast<T*>(0), 1));
+  static constexpr bool nothrow_deallocating = noexcept(m_alloc.deallocate(static_cast<T*>(nullptr), 1));
 
   [[nodiscard]] static constexpr header*
   get_header_pointer_from(T* data) noexcept
@@ -146,8 +151,8 @@ class releasing_vector {
   }
 
   constexpr void expand_to(sz_t count)
-  noexcept(std::is_nothrow_copy_constructible_v<T>)
-  requires std::is_constructible_v<T, decltype(std::move_if_noexcept(std::declval<T>()))> {
+  noexcept(nothrow_move_construct or nothrow_copy_construct)
+  requires (move_constructible or copy_constructible) {
     assert(count >= size());
     T* new_buff = m_alloc.allocate(count + header_count) + header_count;
     auto i{0uz};
@@ -404,7 +409,7 @@ public:
 
   constexpr explicit
   releasing_vector(released_ptr released_data)
-  noexcept(type<Allocator>::nothrow_move_constructible)
+  noexcept(nothrow_move_construct)
   requires store_header
   : m_alloc(std::move(get_header_pointer_from(released_data.get())->alloc)),
     m_begin(released_data.release()) {
@@ -419,7 +424,7 @@ public:
 
   constexpr explicit
   releasing_vector(released_span released_data)
-  noexcept(type<Allocator>::nothrow_move_constructible)
+  noexcept(nothrow_move_construct)
   requires store_header
   : releasing_vector(released_ptr(released_data.release())) {}
 
@@ -443,7 +448,7 @@ public:
 
   constexpr releasing_vector(sz_t count, const T& value, const Allocator &alloc = Allocator())
   noexcept(nothrow_copy_construct)
-  requires std::is_copy_constructible_v<T>
+  requires copy_constructible
   : m_alloc(alloc) {allocate_and_construct(count, std::forward<T>(value));}
 
   constexpr releasing_vector(const releasing_vector&) = delete;
@@ -468,7 +473,7 @@ public:
   }
 
   constexpr ~releasing_vector()
-  noexcept(noexcept(destroy()) and noexcept(deallocate())) {
+  noexcept(nothrow_destruct and nothrow_deallocating) {
     if (m_begin == nullptr)
       return;
 
@@ -660,7 +665,7 @@ public:
   static constexpr released_ptr
   copy_data(const released_ptr& data)
   noexcept(nothrow_deallocating and nothrow_destruct)
-  requires (store_header and copy_constructible_c<T>) {
+  requires (store_header and copy_constructible) {
     if (data == nullptr)
       return released_ptr(nullptr);
 
@@ -753,7 +758,7 @@ public:
   }
 
   constexpr void resize(sz_t count) noexcept
-  requires std::is_default_constructible_v<T> {
+  requires default_constructible {
     if (m_begin == nullptr)
       return allocate_and_construct(count);
 
@@ -771,7 +776,7 @@ public:
   }
 
   constexpr void resize(sz_t count, const T& value) noexcept
-  requires std::is_copy_constructible_v<T> {
+  requires copy_constructible {
     if (m_begin == nullptr)
       return allocate_and_construct(count, value);
 
@@ -813,12 +818,12 @@ public:
   }
 
   constexpr void push_back(const T& value)
-  noexcept(std::is_nothrow_copy_constructible_v<T>)
-  requires std::is_copy_constructible_v<T> {emplace_back(std::forward<const T>(value));}
+  noexcept(nothrow_copy_construct)
+  requires copy_constructible {emplace_back(std::forward<const T>(value));}
 
   constexpr void push_back(T&& value)
-  noexcept(std::is_nothrow_move_constructible_v<T>)
-  requires std::is_move_constructible_v<T> {emplace_back(std::forward<T>(value));}
+  noexcept(nothrow_move_construct)
+  requires move_constructible {emplace_back(std::forward<T>(value));}
 
   constexpr void pop_back()
   noexcept(nothrow_destruct)

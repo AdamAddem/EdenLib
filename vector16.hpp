@@ -26,6 +26,11 @@ class vector16 {
   static constexpr u32_t expansion_mult = settings.expansion_mult;
   static constexpr bool trivially_destructible = std::is_trivially_destructible_v<T>;
 
+  static constexpr bool default_constructible = std::is_default_constructible_v<T>;
+  static constexpr bool move_constructible = std::is_move_constructible_v<T>;
+  static constexpr bool copy_constructible = std::is_copy_constructible_v<T>;
+  static constexpr bool nothrow_default_constructible = std::is_nothrow_default_constructible_v<T>;
+  static constexpr bool nothrow_move_construct = std::is_nothrow_move_constructible_v<T>;
   static constexpr bool nothrow_copy_construct = std::is_nothrow_copy_constructible_v<T>;
 
   [[no_unique_address]] Allocator m_alloc;
@@ -75,8 +80,8 @@ class vector16 {
   }
 
   constexpr void expand_to(u32_t count)
-  noexcept(std::is_nothrow_copy_constructible_v<T>)
-  requires (move_constructible_c<T> or copy_constructible_c<T>) {
+  noexcept(nothrow_copy_construct)
+  requires (move_constructible or copy_constructible) {
     assume_assert(count >= m_size);
     if (count < m_cap) {
       std::print("It seems like eden::vector16 overflowed. Old capacity: {} attempted to expand to {}.", m_cap, count);
@@ -92,8 +97,7 @@ class vector16 {
 
     destroy(); deallocate();
     m_begin = new_buff;
-    m_size = m_begin + i;
-    m_cap = m_begin + count;
+    m_cap = count;
   }
 
   constexpr void destroy_n_backwards(u32_t n)
@@ -295,22 +299,23 @@ public:
   : m_alloc(alloc) {}
 
   constexpr explicit
-  vector16(u32_t count, const Allocator &alloc = Allocator()) noexcept
-  requires default_constructible_c<T>
+  vector16(u32_t count, const Allocator &alloc = Allocator())
+  noexcept(nothrow_default_constructible)
+  requires default_constructible
   : m_alloc(alloc) { allocate_and_construct_with(count); }
 
   constexpr vector16(u32_t count, const T& value, const Allocator &alloc = Allocator())
   noexcept(nothrow_copy_construct)
-  requires copy_constructible_c<T>
+  requires copy_constructible
   : m_alloc(alloc) { allocate_and_construct_with(count, std::forward<T>(value)); }
 
   constexpr vector16(const vector16& other)
   noexcept(nothrow_copy_construct)
-  requires copy_constructible_c<T> = delete; // TO DO: THIS
+  requires copy_constructible = delete; // TO DO: THIS
 
   constexpr vector16& operator=(const vector16& other)
   noexcept(nothrow_copy_construct and nothrow_destruct)
-  requires copy_constructible_c<T> = delete; // TO DO: THIS
+  requires copy_constructible = delete; // TO DO: THIS
 
   template <vector16_settings other_settings, allocator_for_c<T> other_allocator>
   requires compatible_settings<other_settings> and same_c<Allocator, other_allocator>
@@ -528,7 +533,7 @@ public:
   }
 
   constexpr void resize(u32_t count) noexcept
-  requires std::is_default_constructible_v<T> {
+  requires default_constructible {
     if (m_begin == nullptr)
       return allocate_and_construct_with(count);
 
@@ -543,7 +548,7 @@ public:
   }
 
   constexpr void resize(u32_t count, const T& value) noexcept
-  requires std::is_copy_constructible_v<T> {
+  requires copy_constructible {
     if (m_begin == nullptr)
       return allocate_and_construct(count, value);
 
@@ -583,13 +588,13 @@ public:
   }
 
   constexpr void push_back(const T& value)
-  noexcept(std::is_nothrow_copy_constructible_v<T>)
-  requires std::is_copy_constructible_v<T>
+  noexcept(nothrow_copy_construct)
+  requires copy_constructible
   { emplace_back(std::forward<const T>(value)); }
 
   constexpr void push_back(T&& value)
-  noexcept(std::is_nothrow_move_constructible_v<T>)
-  requires std::is_move_constructible_v<T>
+  noexcept(nothrow_move_construct)
+  requires move_constructible
   { emplace_back(std::forward<T>(value)); }
 
   constexpr void pop_back()

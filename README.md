@@ -149,37 +149,37 @@ Introduces the 'type' class, allowing for more convenient template meta-programm
 ```cpp
 /* Shortened names for common concepts and traits */
     std::remove_reference_t<T>
-    type<T>::no_ref //equivalent
+    type<T>::no_ref // equivalent
     
 /* Reads naturally from left to right */
     std::is_same_v<T, U>    std::is_constructible_v<T, Args...>;
     type<T>::is<U>          type<T>::constructible_with<Args...>;
      
 /* Common / Useful transforms and properties */
-    type<int>::opposite_sign; //unsigned
-    type<int[2][3]>::num_dimensions; //2
-    type<int[2][8][5]>::dimension_size<1>; //8
+    type<int>::opposite_sign; // unsigned
+    type<int[2][3]>::num_dimensions; // 2
+    type<int[2][8][5]>::dimension_size<1>; // 8
     type<int>::is_one_of<int, unsigned, char>; // true
     type<int>::is_none_of<int, char>; // false
-    type<const int&>::no_cvref; //int
+    type<const int&>::no_cvref; // int
 
 /* Can be inherited from, allowing for cleaner syntax */
     struct Example : type<Example> {};     
     using example_array = Example::as_array;
     
-    //registered_type concept can be used to filter for parameters inheriting from type
+    // registered_type concept can be used to filter for parameters inheriting from type
     template <registered_type T>
     auto to_array(T&& obj) 
     {...}
  
 /* Type chaining can be achieved by appending a '_' on every type but the last */
-    Example::as_const_::as_array_::as_ptr x; //const Example(*)[]
-    type<int>::as_bounded_array_<5>::as_bounded_array<6> y; //int[6][5]
+    Example::as_const_::as_array_::as_ptr x; // const Example(*)[]
+    type<int>::as_bounded_array_<5>::as_bounded_array<6> y; // int[6][5]
     
 /* Types may be represented as variables */
-    //type_variable concept filters for type<...> instances
+    // type_variable concept filters for type<...> instances
     consteval bool arbitrary_condition(type_variable auto var) {    
-        //_i suffix may be applied to get a transformed type variable
+        // _i suffix may be applied to get a transformed type variable
         return var.is_void || 
                var.no_ptr_i().is_void || 
                other_condition(var) ||
@@ -188,18 +188,18 @@ Introduces the 'type' class, allowing for more convenient template meta-programm
     static constexpr bool meets_condition = arbitrary_condition(Example::type_instance());
 
 /* A type can 'smuggle' itself as another type */
-    struct Nefarious : type<unsigned> {}; //does not satisfy registered_type concept
-    Nefarious::is_integral //true
-    Nefarious::as_signed //int
-    type<Nefarious>::is_integral //false
+    struct Nefarious : type<unsigned> {}; // does not satisfy registered_type concept
+    Nefarious::is_integral // true
+    Nefarious::as_signed // int
+    type<Nefarious>::is_integral // false
  
 /* Types can be given string representations */
     struct BootlegReflection : type<BootlegReflection, "This Language Sucks!"> {};
     std::cout << BootlegReflection::name;
     
-    //append_number_to_literal helper provided
+    // append_number_to_literal helper provided
     template <sz_t N>
     struct Numbered : type<Numbered<N>, append_number_to_literal<N, "Numbered">> {};
     Numbered<3> x;
-    std::cout << x.name; //Numbered<3>
+    std::cout << x.name; // Numbered<3>
 ```
