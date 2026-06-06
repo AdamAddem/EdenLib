@@ -55,10 +55,11 @@ static constexpr const char(&append_number_to_literal)[str_size+22] = append_num
 
 
 
-//an implementation of POSIX's stpcpy
-//returns a pointer to the end of the destination string
-//assumes src and dest are pointing to different buffers
-//assumes neither ptr is null
+// an implementation of POSIX's stpcpy
+// returns a pointer to the end of the destination string
+// assumes src and dest are pointing to different buffers
+// assumes neither ptr is null
+eden_nonull_args
 [[nodiscard]] static constexpr char*
 stpcpy(char* eden_restrict dest, const char* eden_restrict src) noexcept {
   assume_assert(dest); assume_assert(src); assume_assert(dest not_eq src);

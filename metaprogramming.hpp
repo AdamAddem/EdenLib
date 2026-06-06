@@ -1,6 +1,6 @@
 #pragma once
-#include "typedefs.hpp"
 #include "string_utils.hpp"
+#include "typedefs.hpp"
 
 #include <array>
 #include <concepts>
@@ -9,6 +9,7 @@
 #include <type_traits>
 
 namespace eden {
+
 template <class Alloc, class T>
 concept allocator_for_c = requires (Alloc a, T* p, std::size_t n) {
   typename std::allocator_traits<Alloc>::value_type;
@@ -62,15 +63,27 @@ template <typename... Ts>
 ForwardTuple(const Ts&...) -> ForwardTuple<Ts...>;
 
 
+template<class First, class... Rest> struct type_list;
+template<auto First, auto... Rest> struct nontype_list;
 
+
+/* type class */
 template <class T, TemplateString name_str = TemplateString<0>{}>
 struct type {
   using Type = T;
   static consteval auto type_instance() {return type{};}
 
-  template <class OtherType, TemplateString other_name>
+  constexpr type() noexcept = default;
+  constexpr type(const T&) noexcept {}
+
+  template <class OtherType>
+  consteval type_list<Type, OtherType>
+  operator+(type<OtherType>) const noexcept
+  { return type_list<Type, OtherType>{}; }
+
+  template <class OtherType>
   consteval bool
-  operator==(const type<OtherType, other_name>&) const noexcept {
+  operator==(type<OtherType>) const noexcept {
     if constexpr (std::is_same_v<Type, OtherType>)
       return true;
     else
@@ -283,19 +296,221 @@ public:
 };
 
 template <class T>
-concept registered_type = std::derived_from<T, type<T>> or
+concept properly_registered_type_c = std::derived_from<T, type<T>> or
   requires (T a) {
-    []<TemplateString N>(type<T, N>){}(a);
+    []<TemplateString str>(type<T, str>){} (a);
   };
 
 template <class T>
-concept type_instance = requires (T a) {
-  []<typename U, TemplateString str>(type<U, str>) consteval {
-  }(a);
+concept registered_type_c = requires (T a) {
+  []<typename U, TemplateString str>(type<U, str>){} (a);
 };
 
+template <type T>
+using unwrap = decltype(T)::Type;
+
+template<class T>
+inline constexpr type<T> type_i;
+/* type class */
+
+/* type list and nontype list */
+template <auto First, auto... Rest>
+struct nontype_list {
+  static constexpr sz_t length = sizeof...(Rest) + 1;
+  static constexpr type<decltype(First)> first_type{};
+
+  consteval nontype_list() noexcept = default;
+
+  [[nodiscard]] static consteval auto
+  next() noexcept { return nontype_list<Rest...>{}; }
+
+  [[nodiscard]] static consteval type_list<decltype(First), decltype(Rest)...>
+  as_typelist() noexcept;
+
+  [[nodiscard]] static consteval auto
+  current() noexcept { return First; }
+
+  template<sz_t idx>
+  requires (idx < length)
+  [[nodiscard]] static consteval auto
+  at() noexcept {
+    if constexpr (idx == 0)
+      return current();
+    else return next().template at<idx - 1>();
+  }
+
+  template<auto... Others>
+  [[nodiscard]] static consteval auto
+  append(nontype_list<Others...>) noexcept
+  { return nontype_list<First, Others...>{}; }
+
+  template<auto Other>
+  [[nodiscard]] static consteval auto
+  append() noexcept
+  { return nontype_list<First, Other>{}; }
+
+  template<sz_t idx>
+  requires (idx < length)
+  [[nodiscard]] static consteval auto
+  type_at() noexcept {
+    if constexpr (idx == 0)
+      return first_type;
+    else return next().template type_at<idx - 1>();
+  }
+
+};
+
+template <auto Last>
+struct nontype_list<Last> {
+  static constexpr sz_t length = 1;
+  static constexpr type<decltype(Last)> first_type{};
+
+  [[nodiscard]] static consteval type_list<decltype(Last)>
+  as_typelist() noexcept;
+
+  [[nodiscard]] static consteval auto
+  current() noexcept { return Last; }
+
+  template<sz_t idx>
+  requires (idx == 0)
+  [[nodiscard]] static consteval auto
+  at() noexcept { return current(); }
+
+  template<auto... Others>
+  [[nodiscard]] static consteval auto
+  append(nontype_list<Others...>) noexcept
+  { return nontype_list<Last, Others...>{}; }
+
+  template<auto Other>
+  [[nodiscard]] static consteval auto
+  append() noexcept
+  { return nontype_list<Last, Other>{}; }
+
+  template<sz_t idx>
+  requires (idx == 0)
+  [[nodiscard]] static consteval auto
+  type_at() noexcept { return first_type; }
+};
+
+template <class First, class... Rest>
+struct type_list {
+  static constexpr sz_t length = sizeof...(Rest) + 1;
+
+  template<sz_t idx>
+  requires (idx < length)
+  [[nodiscard]] static consteval auto
+  type_at() noexcept {
+      if constexpr (idx == 0)
+        return current();
+      else return next().template type_at<idx - 1>();
+  }
+
+  consteval type_list() noexcept = default;
+  consteval type_list(type<First>, type<Rest>...) noexcept {}
+
+  [[nodiscard]] static consteval auto
+  next() noexcept { return type_list<Rest...>{}; }
+
+  [[nodiscard]] static consteval auto
+  as_defaulted_nontypes() noexcept { return nontype_list<First{}, Rest{}...>{}; }
+
+  template <auto first_value, auto... rest_values>
+  requires (
+    sizeof...(rest_values) + 1 == length and
+    std::is_convertible_v<decltype(first_value), First> and
+    (std::is_convertible_v<decltype(rest_values), Rest> and...))
+  static constexpr auto filtered_values = nontype_list<static_cast<First>(first_value), static_cast<Rest>(rest_values)...>{};
+
+  template <auto... values>
+  [[nodiscard]] static constexpr auto
+  filter_nontypes(nontype_list<values...>) noexcept
+  { return filtered_values<values...>; }
+
+  [[nodiscard]] static consteval auto
+  current() noexcept { return type<First>{}; }
+
+  template<class... Other>
+  [[nodiscard]] static consteval auto
+  append(type_list<Other...>) noexcept
+  { return type_list<First, Rest..., Other...>{}; }
+
+  template<class Other>
+  [[nodiscard]] static consteval auto
+  append(type<Other>) noexcept
+  { return type_list<First, Rest..., Other>{}; }
+
+  template<class Other>
+  [[nodiscard]] static consteval auto
+  append() noexcept
+  { return type_list<First, Rest..., Other>{}; }
+
+  template<sz_t idx>
+  using at = unwrap<type_list::type_at<idx>()>;
+};
+
+template <class Last>
+struct type_list<Last> {
+  static constexpr sz_t length = 1;
+
+  consteval type_list() noexcept = default;
+  explicit consteval type_list(type<Last>) noexcept {}
+
+  [[nodiscard]] static consteval auto
+  current() noexcept { return type<Last>{}; }
+
+  [[nodiscard]] static consteval auto
+  as_defaulted_nontypes() noexcept { return nontype_list<Last{}>{}; }
+
+  template <class value_type>
+  requires (std::is_convertible_v<value_type, Last>)
+  [[nodiscard]] static consteval auto
+  as_nontypes(value_type value) noexcept { return nontype_list<static_cast<Last>(value)>{}; }
+
+  template <auto value>
+  requires (std::is_convertible_v<decltype(value), Last>)
+  static constexpr auto filtered_values = nontype_list<static_cast<Last>(value)>{};
+
+  template <auto value>
+  [[nodiscard]] static constexpr auto
+  filter_nontypes(nontype_list<value>) noexcept
+  { return nontype_list<static_cast<Last>(value)>{}; }
+
+  template<class... Other>
+  [[nodiscard]] static consteval auto
+  append(type_list<Other...>) noexcept
+  { return type_list<Last, Other...>{}; }
+
+  template<class Other>
+  [[nodiscard]] static consteval auto
+  append(type<Other>) noexcept
+  { return type_list<Last, Other>{}; }
+
+  template<class Other>
+  [[nodiscard]] static consteval auto
+  append() noexcept
+  { return type_list<Last, Other>{}; }
+
+  template <sz_t idx>
+  requires (idx == 0)
+  using at = unwrap<type_list::current()>;
+
+  template<sz_t idx>
+  requires (idx == 0)
+  [[nodiscard]] static consteval auto
+  type_at() noexcept { return current(); }
+};
+
+template <auto First, auto... Rest>
+[[nodiscard]] consteval type_list<decltype(First), decltype(Rest)...>
+nontype_list<First, Rest...>::as_typelist() noexcept { return type_list<decltype(First), decltype(Rest)...>{}; }
+
+template <auto Last>
+[[nodiscard]] consteval type_list<decltype(Last)>
+nontype_list<Last>::as_typelist() noexcept { return type_list<decltype(Last)>{}; }
+/* type list and nontype list */
 
 
+/* i totally forgot what this was */
 template <class T>
 extern T extern_never_defined;
 
@@ -324,12 +539,8 @@ template<class... Args>
 static constexpr auto offsets() noexcept -> const sz_t(&)[sizeof...(Args)] {
   struct Bullshit {
     sz_t arr[sizeof...(Args)];
-
-    consteval Bullshit() {
-      assign_offsets<0, Args...>(arr);
-    }
+    consteval Bullshit() { assign_offsets<0, Args...>(arr); }
   };
-
   static constexpr Bullshit offsets;
   return offsets.arr;
 }
@@ -364,9 +575,10 @@ struct class_reflection {
     for_each_h<0>(ptr, std::forward<decltype(callable)>(callable));
   }
 };
+/* i totally forgot what this was */
 
 
-
+/* General Concepts */
 template <class T> concept pointer_c = std::is_pointer_v<T>;
 template <class T> concept enum_c = std::is_enum_v<T>;
 template <class T> concept void_c = std::is_void_v<T>;
@@ -387,6 +599,7 @@ template <class T> concept move_constructible_c = std::is_move_constructible_v<T
 template <class T> concept move_assignable_c = std::is_move_assignable_v<T>;
 template <class T> concept nothrow_move_constructible_c = std::is_nothrow_move_constructible_v<T>;
 template <class T> concept nothrow_move_assignable_c = std::is_nothrow_move_assignable_v<T>;
+/* General Concepts */
 
 
 }
