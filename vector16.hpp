@@ -102,12 +102,10 @@ class vector16 {
 
   constexpr void destroy_n_backwards(u32_t n)
   noexcept(nothrow_destruct) {
-    assume_assert(m_begin); assert(m_size >= n); assert(n < std::numeric_limits<u32_t>::max());
-    ++n;
-    while (n > 1) {
+    assume_assert(m_begin); assert(m_size >= n);
+    while (n-- > 0)
       alloc_traits::destroy(m_alloc, --m_size);
-      --n;
-    }
+
   }
 
 public:
