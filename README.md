@@ -1,10 +1,13 @@
 ### Made in C++23
 
 This is a collection of containers, functions, and utilities that i've created for one of many reasons:
-- The standard library doesn't provide a way of doing what I wanted (releasing_vector, vector16)
+- The standard library doesn't provide a way of doing what I wanted (vectors)
 - The standard library has a limited or annoying implementation of what I wanted (owned)
 - Convenience (assume_assert, typedefs, lifetime_observer, enum_utils)
 - Eh, might as well (arena, macros, null_conditional_chaining, metaprogramming)
+
+The README in the vectors directory provides some information on the vector implementations, 
+when you'd want to use them, and how to leverage base_vector.hpp to easily create your own implementation. <br>
 
 ---
 Here is a quick summary of the smaller headers:
@@ -41,12 +44,6 @@ Here is a quick summary of the smaller headers:
 - string_utils.hpp
   - Provides the TemplateString class, a way of creating and manipulating strings at compile time.
   - Provides stpcpy, a portable version of POSIX's stpcpy.
-- vectors/vector16.hpp
-  - Vector using u32's for size and capacity, lowering the vector's overhead to 16 bytes.
-  - Has the same QOL additions as releasing vector minus the safe releasing functionality.
-- vectors/swap_vector.hpp
-  - Vector that allows you to linearly search for an element using a custom predicate.
-  - Found elements are moved towards the back of the array for faster search in the future.
 ---
 ###  owned.hpp
 owned_ptr, A version of unique_ptr without deletion. <br>
@@ -64,81 +61,6 @@ c_str specialization provided, with more utilities:
 - length()
 
 owned_span is also included in this header, with identical semantics but for span rather than unique_ptr.
-
-### releasing_vector.hpp
-An implementation of a vector able to 'release' ownership over its internal buffer. <br>
-If the data is released, but needs to be accessed as if it were a vector again, a new releasing_vector can claim ownership. <br>
-When the data is no longer needed, the pointer can handle its own destruction through a method. <br>
-Iterator invalidation rules are consistent with std::vector. 
-- After release iterators are guaranteed to remain valid, provided the data is not reclaimed by another vector.
-
-'Settings' are provided allowing you to specify:
-- Expansion multiplier.
-- Whether to enable string capabilities (will always release a null terminated array).
-
-Note that no exception safety is guaranteed, because exceptions are lame and I don't care.
-- As such, the noexcept status of any given method is determined by whether the allocator and/or value type is noexcept for that task.
-
-API:
-```cpp
-// constexpr and noexcept will be excluded for brevity.
-// methods that are identical to their std::vector counterparts will be excluded too.
-    
-/*  Constructors / Assignment */
-
-    template <sz_t N> 
-    explicit (flags::ReserveInitial<N>); // pass in a flags::reserve_initial<N> instance 
-    
-    explicit (released_ptr released_data) requires store_header;    // reclaims ownership over data previously released
-    explicit (released_span released_data) requires store_header;   // same as above
-     
-    // copy constructor / assignment not implemented at the moment.
- 
-    // move constructor / assignment / swap defined only for releasing vectors with compatable settings
-    // settings are compatable if their CString value is the same 
-    
-/*  Constructors / Assignment */
-
-/*  Release and Deletion */
-
-    // releases the data in the form of a released_ptr / released_span
-    released_ptr release(); 
-    released_span release_span(); 
-    
-    // destroys and deallocates the released data when it is no longer needed
-    static void destroy_and_dellocate(released_ptr data); 
-    
-    // returns a released_ptr to element-wise copied array
-    // equivalent to constructing a new releasing_vector, reserving the exact size, copying all elements into it, then releasing
-    static released_ptr copy_data(const released_ptr& data) requires copy_constructible<T>;
-    
-    // returns the size or capacity of the data
-    static sz_t data_size(const released_ptr& data);
-    static sz_t data_capacity(const released_ptr& data);
-    
-/*  Release and Deletion */
-
-/*  Additional Utilities */
-
-    explicit operator std::span<T>() const;
-    std::span<T> to_span() const;
-    
-    /* CString specific utilities */ 
-    template <sz_t N> explicit (const char(&c_str)[N]); // string literal constructor
-    
-    operator std::string_view() const;
-    std::string_view to_stringview() const;
-    explicit operator std::string() const;
-    std::string to_stdstring() const;
-
-    template<sz_t N> bool operator==(const std::string& std_str);  
-    template<sz_t N> bool operator==(const char(&c_str)[N]);
-    
-    /* CString specific utilities */
-
-/*  Additional Utilities */
-   
-```
 
 ### metaprogramming/type_class.hpp
 Introduces the 'type' class, allowing for more convenient template meta-programming and the representation of types as first-class citizens. <br>
@@ -253,6 +175,4 @@ Also features an implementation of type_list and a 'nontype_list'. <br>
     
     
     auto defaulted = int_types.as_defaulted_nontypes();         // nontype_list<0, 0>
-    
-    
 ```

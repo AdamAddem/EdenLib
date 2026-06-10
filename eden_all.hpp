@@ -11,4 +11,3 @@
 #include "typedefs.hpp"
 #include "vectors/releasing_vector.hpp"
 #include "vectors/swap_vector.hpp"
-#include "vectors/vector16.hpp"
