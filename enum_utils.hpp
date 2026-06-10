@@ -1,5 +1,5 @@
 #pragma once
-#include "metaprogramming.hpp"
+#include "metaprogramming/type_class.hpp"
 #include "type_flags.hpp"
 #include <utility>
 

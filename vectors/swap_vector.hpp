@@ -1,24 +1,39 @@
 #pragma once
-#include "macros.hpp"
-#include "metaprogramming.hpp"
-#include "type_flags.hpp"
-#include "typedefs.hpp"
+#include "../macros.hpp"
+#include "../metaprogramming/concepts.hpp"
+#include "../metaprogramming/type_class.hpp"
+#include "../type_flags.hpp"
+#include "../typedefs.hpp"
 
+#include <bit>
 #include <memory>
 #include <print>
 #include <span>
 #include <string>
 
 namespace eden {
-template <u64_t ExpansionMult = 2>
-requires (ExpansionMult > 1)
+
+/*
+*  Stability (default 4, recommended to be a power of 2 for faster integer division):
+*     -When a searched for element is found, it is swapped with the element size()/stability + 1 indices closer to the back.
+*     -A stability of 1 always swaps the element with the backmost element.
+*     -A higher stability is recommended for patterns that consistently search for a larger subset of elements over a longer period of time.
+*     -A lower stability is recommended for patterns that search for a smaller subset of elements that changes frequently.
+*  ExpansionMult (default 2):
+*     -The multiplier applied to the capacity everytime the vector must expand.
+*/
+template<u64_t Stability = 4,
+         u64_t ExpansionMult = 2>
+requires (Stability >= 1)
 struct swap_vector_settings {
+  static constexpr u64_t stability = Stability;
   static constexpr u64_t expansion_mult = ExpansionMult;
 };
 
-template <class T, swap_vector_settings settings = swap_vector_settings{}, allocator_for_c<T> Allocator = std::allocator<T>>
-requires (std::allocator_traits<Allocator>::propagate_on_container_move_assignment::value)
+template <class T, auto BinaryPredicate, auto settings = swap_vector_settings{}, allocator_for_c<T> Allocator = std::allocator<T>>
+requires (std::allocator_traits<Allocator>::propagate_on_container_move_assignment::value and std::swappable<T>)
 class swap_vector {
+  static constexpr u64_t stability = settings.stability;
   static constexpr u64_t expansion_mult = settings.expansion_mult;
   static constexpr bool trivially_destructible = std::is_trivially_destructible_v<T>;
 
@@ -69,9 +84,9 @@ class swap_vector {
 
   template <class ...Args>
   constexpr void allocate_and_construct(sz_t count, Args&&... args)
-  noexcept(std::is_nothrow_constructible_v<T, Args...>)
-  requires std::is_constructible_v<T, Args...> {
-    first_allocation(count);
+  noexcept(nothrow_constructible_with_c<T, Args...>)
+  requires constructible_with_c<T, Args...> {
+    allocate_from_empty(count);
     while (m_size not_eq m_cap)
       alloc_traits::construct(m_alloc, m_size++, std::forward<Args>(args)...);
   }
@@ -80,15 +95,12 @@ class swap_vector {
   noexcept(nothrow_move_construct or nothrow_copy_construct)
   requires (move_constructible or copy_constructible) {
     assert(count >= size());
-    T* new_buff = m_alloc.allocate(count + header_count) + header_count;
+    T* new_buff = m_alloc.allocate(count);
     auto i{0uz};
     while ((m_begin + i) not_eq m_size) {
       alloc_traits::construct(m_alloc, new_buff + i, std::move_if_noexcept(*(m_begin + i)));
       ++i;
     }
-    if constexpr (store_header)
-      *std::launder(
-        (void**)(new_buff - header_count)) = header_pointer();
 
     destroy(); deallocate();
     m_begin = new_buff;
@@ -98,18 +110,12 @@ class swap_vector {
 
   constexpr void destroy_n_backwards(sz_t n)
   noexcept(nothrow_destruct) {
-    assume_assert(m_begin); assert(size() >= n); assert(n < std::numeric_limits<sz_t>::max());
-    ++n;
-    while (n > 1) {
+    assume_assert(m_begin); assert(size() >= n);
+    while (n-- > 0)
       alloc_traits::destroy(m_alloc, --m_size);
-      --n;
-    }
   }
 
 public:
-
-  template<swap_vector_settings other>
-  static constexpr bool compatible_settings = store_header == other.store_header and is_string == other.is_string;
 
   struct const_iterator {
     using iterator_category = std::contiguous_iterator_tag;
@@ -271,124 +277,41 @@ public:
   using const_reverse_iterator = std::reverse_iterator<const_iterator>;
   using reverse_iterator = std::reverse_iterator<iterator>;
 
-  class data_handle {
-    friend class swap_vector;
-
-    [[no_unique_address]] Allocator alloc;
-    sz_t size;
-    sz_t capacity;
-  public:
-    owned_ptr<T[]> data;
-
-    constexpr ~data_handle() {
-      if (data == nullptr)
-        return;
-
-      if constexpr (not trivially_destructible) {
-        while (size not_eq 0)
-          alloc_traits::destroy(alloc, data + --size);
-      }
-
-      alloc.deallocate(data, capacity);
-    }
-  };
-
-  struct released_ptr : public owned_ptr<T[]> {
-    constexpr void destroy_and_deallocate()
-    noexcept(nothrow_deallocating and nothrow_destruct)
-    requires store_header
-    {swap_vector::destroy_and_deallocate(std::move(*this));}
-
-    constexpr released_ptr() noexcept = default;
-    explicit constexpr
-    released_ptr(T* previously_released_data) noexcept
-    : owned_ptr<T[]>(previously_released_data) {}
-
-    //note that this method is more expensive than a typical size() call
-    [[nodiscard]] constexpr sz_t
-    size() const noexcept
-    {return swap_vector::data_size(*this);}
-  };
-
-  struct released_span : public owned_span<T> {
-    constexpr void destroy_and_deallocate()
-    noexcept(nothrow_deallocating and nothrow_destruct)
-    requires store_header
-    {swap_vector::destroy_and_deallocate(std::move(*this));}
-
-    constexpr released_span() noexcept requires store_header = default;
-    constexpr released_span(released_ptr previously_released_data, sz_t sz) noexcept
-    requires store_header : owned_span<T>(std::move(previously_released_data), sz) {}
-    constexpr released_span(released_ptr&& cstr) noexcept
-    requires is_string : owned_span<T>(std::move(cstr)){}
-  };
-
   constexpr swap_vector()
-  noexcept(std::is_nothrow_default_constructible_v<Allocator>)
-  = default;
+  noexcept(std::is_nothrow_default_constructible_v<Allocator>) = default;
 
   template <sz_t N>
   constexpr explicit
   swap_vector(flags::ReserveInitial<N>)
   noexcept(nothrow_allocating)
-  {first_allocation(N);}
-
-  constexpr explicit
-  swap_vector(released_ptr released_data)
-  noexcept(nothrow_move_construct)
-  requires store_header
-  : m_alloc(std::move(get_header_pointer_from(released_data.get())->alloc)),
-    m_begin(released_data.release()) {
-    assume_assert(m_begin not_eq nullptr);
-    auto h = get_header_pointer_from(m_begin);
-    m_size = m_begin + h->size;
-    m_cap = m_begin + h->capacity;
-    if constexpr (is_string)
-      pop_back();
-    std::destroy_at(h);
-  }
-
-  constexpr explicit
-  swap_vector(released_span released_data)
-  noexcept(nothrow_move_construct)
-  requires store_header
-  : swap_vector(released_ptr(released_data.release())) {}
-
-  template <sz_t N>
-  constexpr explicit
-  swap_vector(const char(&c_str)[N])
-  noexcept(nothrow_allocating)
-  requires is_string {
-    first_allocation(N);
-    std::copy_n(c_str, N - 1, m_begin);
-    m_size = m_begin + (N - 1);
-  }
+  { allocate_from_empty(N); }
 
   constexpr explicit
   swap_vector(const Allocator &alloc) noexcept
   : m_alloc(alloc) {}
 
   constexpr explicit
-  swap_vector(sz_t count, const Allocator &alloc = Allocator()) noexcept
-  : m_alloc(alloc) {allocate_and_construct(count);}
+  swap_vector(sz_t count, const Allocator &alloc = Allocator())
+  noexcept(noexcept(allocate_and_construct(count)))
+  : m_alloc(alloc) { allocate_and_construct(count); }
 
   constexpr swap_vector(sz_t count, const T& value, const Allocator &alloc = Allocator())
   noexcept(nothrow_copy_construct)
   requires copy_constructible
-  : m_alloc(alloc) {allocate_and_construct(count, std::forward<T>(value));}
+  : m_alloc(alloc) { allocate_and_construct(count, std::forward<T>(value)); }
 
-  constexpr swap_vector(const swap_vector&) = delete;
-  constexpr swap_vector& operator=(const swap_vector&) = delete;
+  constexpr swap_vector(const swap_vector&) = delete; // TODO: This
+  constexpr swap_vector& operator=(const swap_vector&) = delete; // TODO: This
 
-  template <swap_vector_settings other_settings, allocator_for_c<T> other_allocator>
-  requires compatible_settings<other_settings> and same_c<Allocator, other_allocator>
-  constexpr swap_vector(swap_vector<T, other_settings, other_allocator> &&other) noexcept
+  template <auto other_pred, auto other_settings, allocator_for_c<T> other_allocator>
+  requires same_c<Allocator, other_allocator>
+  constexpr swap_vector(swap_vector<T, other_pred, other_settings, other_allocator> &&other) noexcept
   : m_alloc(std::move(other.m_alloc)), m_begin(other.m_begin), m_size(other.m_size), m_cap(other.m_cap)
-  {other.m_begin = other.m_size = other.m_cap = nullptr;}
+  { other.m_begin = other.m_size = other.m_cap = nullptr; }
 
-  template <swap_vector_settings other_settings, allocator_for_c<T> other_allocator>
-  requires compatible_settings<other_settings> and same_c<Allocator, other_allocator>
-  constexpr void swap(swap_vector<T, other_settings, other_allocator>& other) noexcept {
+  template <auto other_pred, auto other_settings, allocator_for_c<T> other_allocator>
+  requires same_c<Allocator, other_allocator>
+  constexpr void swap(swap_vector<T, other_pred, other_settings, other_allocator>& other) noexcept {
     if constexpr (alloc_traits::propagate_on_container_swap)
       std::swap(m_alloc, other.m_alloc);
     else
@@ -404,17 +327,13 @@ public:
       return;
 
     destroy();
-    if constexpr (store_header) {
-      auto header_ptr = header_pointer();
-      ::operator delete(header_ptr, static_cast<std::align_val_t>(alignof(header)));
-    }
     deallocate();
   }
 
-  template <swap_vector_settings other_settings, allocator_for_c<T> other_allocator>
-  requires compatible_settings<other_settings> and same_c<Allocator, other_allocator>
+  template <auto other_pred, auto other_settings, allocator_for_c<T> other_allocator>
+  requires same_c<Allocator, other_allocator>
   constexpr swap_vector&
-  operator=(swap_vector<T, other_settings, other_allocator> &&other) noexcept {
+  operator=(swap_vector<T, other_pred, other_settings, other_allocator> &&other) noexcept {
     destroy(); deallocate();
     m_alloc = std::move(other.m_alloc);
     m_begin = other.m_begin; m_size = other.m_size; m_cap = other.m_cap;
@@ -426,23 +345,23 @@ public:
   at(sz_t pos) {
     if (m_begin + pos >= m_size)
       throw std::out_of_range(std::format("Element access at index {} in eden::swap_vector with size of {}.", pos, size()));
-    return *(m_begin + pos);
+    return m_begin[pos];
   }
 
   [[nodiscard]] constexpr const T&
   at(sz_t pos) const {
     if (m_begin + pos >= m_size)
       throw std::out_of_range(std::format("Element access at index {} in eden::swap_vector with size of {}.", pos, size()));
-    return *(m_begin + pos);
+    return m_begin[pos];
   }
 
   [[nodiscard]] constexpr T&
   operator[](sz_t pos) noexcept
-  {assume_assert(m_begin); return *(m_begin + pos);}
+  {assume_assert(m_begin); return m_begin[pos];}
 
   [[nodiscard]] constexpr const T&
   operator[](sz_t pos) const noexcept
-  {assume_assert(m_begin); return *(m_begin + pos);}
+  {assume_assert(m_begin); return m_begin[pos];}
 
   [[nodiscard]] constexpr iterator
   begin() noexcept
@@ -502,119 +421,25 @@ public:
 
   [[nodiscard]] constexpr T&
   back() noexcept
-  {assume_assert(m_size); return *(m_size - 1);}
+  {assume_assert(m_size); return m_size[-1];}
 
   [[nodiscard]] constexpr const T&
   back() const noexcept
-  {assume_assert(m_size); return *(m_size - 1);}
+  {assume_assert(m_size); return m_size[-1];}
 
-
-  // If this is a string, this will NOT return a null terminated string.
   [[nodiscard]] constexpr T*
   data() noexcept { return m_begin; }
 
-  [[nodiscard]] constexpr released_ptr
-  release() noexcept
-  requires store_header {
-    if (m_begin == nullptr)
-      return released_ptr(nullptr);
+  [[nodiscard]] constexpr const T*
+  data() const noexcept { return m_begin; }
 
-    if constexpr (is_string) {
-      if (size() == capacity())
-        expand_to(capacity() + 1);
-      push_back('\0');
-    }
-
-    T* data = m_begin;
-    construct_header();
+  // RAII opt out.
+  // Tuple is: ptr, end_size_ptr, end_capacity_ptr, moved allocator
+  [[nodiscard]] constexpr std::tuple<T*, T*, T*, Allocator>
+  release_unsafe() noexcept {
+    auto ret = std::tuple(m_begin, m_size, m_cap, std::move(m_alloc));
     m_cap = m_size = m_begin = nullptr;
-    return released_ptr(data);
-  }
-
-  [[nodiscard]] constexpr released_span
-  release_span() noexcept
-  requires store_header {
-    auto sz = size();
-    return released_span(release(), sz);
-  }
-
-  [[nodiscard]] constexpr data_handle
-  release() noexcept
-  requires (not store_header) {
-    if (m_begin == nullptr)
-      return {alloc_traits::select_on_container_copy_construction(m_alloc), 0, 0, nullptr};
-
-    if constexpr (is_string) {
-      if (size() == capacity())
-        expand_to(capacity() + 1);
-      push_back('\0');
-    }
-
-    T* data = m_begin;
-    sz_t sz = size();
-    sz_t cap = capacity();
-    m_cap = m_size = m_begin = nullptr;
-
-    return {alloc_traits::select_on_container_copy_construction(m_alloc), sz, cap, data};
-  }
-
-  static constexpr void
-  destroy_and_deallocate(released_ptr data)
-  noexcept(nothrow_deallocating and nothrow_destruct)
-  requires store_header {
-    if (data == nullptr)
-      return;
-
-    auto header_ptr = get_header_pointer_from(data.get());
-    auto& alloc = header_ptr->alloc;
-    if constexpr (not trivially_destructible) {
-      sz_t size = header_ptr->size;
-      while (size not_eq 0)
-        alloc_traits::destroy(alloc, data.get() + --size);
-    }
-    const sz_t cap = header_ptr->capacity;
-    alloc.deallocate(data.get() - header_count, cap + header_count);
-
-    std::destroy_at(header_ptr);
-    ::operator delete(header_ptr, static_cast<std::align_val_t>(alignof(header)));
-  }
-
-  static constexpr void
-  destroy_and_deallocate(released_span data)
-  noexcept(nothrow_deallocating and nothrow_destruct)
-  requires store_header {
-    return destroy_and_deallocate(released_ptr(data.get()));
-  }
-
-  //investigate possible bug involving string specialization
-  //this might be adding a redundant null terminator
-  static constexpr released_ptr
-  copy_data(const released_ptr& data)
-  noexcept(nothrow_deallocating and nothrow_destruct)
-  requires (store_header and copy_constructible) {
-    if (data == nullptr)
-      return released_ptr(nullptr);
-
-    auto header_ptr = get_header_pointer_from(const_cast<T*>(data.get()));
-    const sz_t size = header_ptr->size;
-    swap_vector v(header_ptr->alloc);
-    v.reserve(size);
-
-    for (auto i{0uz}; i<size; ++i)
-      v.emplace_back(data[i]);
-    return v.release();
-  }
-
-  static constexpr sz_t
-  data_size(const released_ptr& data) noexcept {
-    auto header_ptr = get_header_pointer_from(const_cast<T*>(data.get()));
-    return header_ptr->size;
-  }
-
-  static constexpr sz_t
-  data_capacity(const released_ptr& data) noexcept {
-    auto header_ptr = get_header_pointer_from(const_cast<T*>(data.get()));
-    return header_ptr->capacity;
+    return ret;
   }
 
   [[nodiscard]] constexpr explicit
@@ -624,49 +449,6 @@ public:
   [[nodiscard]] constexpr std::span<T>
   to_span() const noexcept
   { return (*this).operator std::span<T>(); }
-
-  [[nodiscard]] constexpr
-  operator std::string_view() const noexcept
-  requires is_string
-  { return std::string_view(m_begin, size()); }
-
-  [[nodiscard]] constexpr std::string_view
-  to_stringview() const noexcept
-  requires is_string
-  { return (*this).operator std::string_view(); }
-
-  [[nodiscard]] constexpr explicit
-  operator std::string() const noexcept
-  requires is_string
-  { return std::string(m_begin, size()); }
-
-  [[nodiscard]] constexpr std::string
-  to_stdstring() const noexcept
-  requires is_string
-  { return (*this).operator std::string(); }
-
-  template <sz_t N>
-  [[nodiscard]] constexpr bool
-  operator==(const char(&c_str)[N]) noexcept
-  requires is_string {
-    const sz_t sz = size();
-    if ((N-1) not_eq sz)
-      return false;
-
-    auto i{0uz};
-    while (i < sz) {
-      if (m_begin[i] not_eq c_str[i])
-        return false;
-      ++i;
-    }
-    assume_assert(c_str[N-1] == '\0' and "Pass a terminated string to this function, doofus");
-    return true;
-  }
-
-  [[nodiscard]] constexpr bool
-  operator==(const std::string& std_str) const noexcept
-  requires is_string
-  { return to_stringview() == std::string_view(std_str); }
 
   [[nodiscard]] constexpr bool
   empty() const noexcept
@@ -678,7 +460,7 @@ public:
 
   constexpr void reserve(sz_t new_capacity) noexcept {
     if (m_begin == nullptr)
-      first_allocation(new_capacity);
+      allocate_from_empty(new_capacity);
     else if (capacity() < new_capacity)
       expand_to(new_capacity);
   }
@@ -721,21 +503,21 @@ public:
 
   [[nodiscard]] constexpr sz_t
   capacity() const noexcept
-  {return m_cap - m_begin;}
+  { return m_cap - m_begin; }
 
   constexpr void shrink_to_fit() const noexcept {
     if (size() not_eq capacity())
       expand_to(size());
   }
 
-  constexpr void clear() noexcept {destroy();}
+  constexpr void clear() noexcept { destroy(); }
 
   template <class... Args> constexpr T&
   emplace_back(Args&&... args)
   noexcept(std::is_nothrow_constructible_v<T, Args...>)
   requires std::is_constructible_v<T, Args...> {
     if (m_begin == nullptr)
-      first_allocation(1);
+      allocate_from_empty(1);
     else if (m_size == m_cap)
       expand_to(capacity() * expansion_mult);
 
@@ -745,21 +527,46 @@ public:
 
   constexpr void push_back(const T& value)
   noexcept(nothrow_copy_construct)
-  requires copy_constructible {emplace_back(std::forward<const T>(value));}
+  requires copy_constructible
+  { emplace_back(std::forward<const T>(value)); }
 
   constexpr void push_back(T&& value)
   noexcept(nothrow_move_construct)
-  requires move_constructible {emplace_back(std::forward<T>(value));}
+  requires move_constructible
+  { emplace_back(std::forward<T>(value)); }
 
   constexpr void pop_back()
   noexcept(nothrow_destruct)
-  {assume_assert(m_begin); assume_assert(m_size not_eq m_begin); alloc_traits::destroy(m_alloc, --m_size);}
+  { assume_assert(m_begin); assume_assert(m_size not_eq m_begin); alloc_traits::destroy(m_alloc, --m_size); }
+
+  // returns nullptr if not found. pointer is unstable and may point to bad data should this vector expand or another search be called.
+  template<class KeyType>
+  [[nodiscard]] constexpr T*
+  search(KeyType&& key)
+  noexcept(nothrow_swappable_c<T>)
+  requires (convertible_to_c<decltype(BinaryPredicate(std::declval<T>(), std::forward<KeyType>(key))), bool>) {
+    static constexpr bool transposition = stability >= 1;
+
+    auto const sz = size();
+    auto n = sz;
+    auto const back_bubble = transposition ? sz / stability + 1 : 0;
+    while (n-- > 0) {
+      auto curr_ptr = m_begin + n;
+      bool const hit = BinaryPredicate(*curr_ptr, std::forward<KeyType>(key));
+      if (hit) {
+        auto const swap_location = (transposition ? m_begin + std::min(back_bubble + n, sz-1) : m_size - 1);
+        if (curr_ptr not_eq swap_location) std::swap(*curr_ptr, *swap_location);
+        return swap_location;
+      }
+    }
+    return nullptr;
+  }
+
 };
 
-template <class T, swap_vector_settings lhs_settings, swap_vector_settings rhs_settings, allocator_for_c<T> allocator>
-requires swap_vector<T, lhs_settings, allocator>::template compatible_settings<rhs_settings>
+template <class T, auto LHS_Pred, auto LHS_Settings, auto RHS_Pred, auto RHS_Settings, allocator_for_c<T> allocator>
 [[nodiscard]] constexpr bool
-operator==(const swap_vector<T, lhs_settings, allocator>& lhs, const swap_vector<T, rhs_settings, allocator>& rhs) noexcept
+operator==(const swap_vector<T, LHS_Pred, LHS_Settings, allocator>& lhs, const swap_vector<T, RHS_Pred, RHS_Settings, allocator>& rhs) noexcept
 requires std::equality_comparable<T> {
   const auto sz = lhs.size();
   if (sz not_eq rhs.size())

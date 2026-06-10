@@ -4,7 +4,7 @@ This is a collection of containers, functions, and utilities that i've created f
 - The standard library doesn't provide a way of doing what I wanted (releasing_vector, vector16)
 - The standard library has a limited or annoying implementation of what I wanted (owned)
 - Convenience (assume_assert, typedefs, lifetime_observer, enum_utils)
-- Eh, might as well (arena, macros, null_conditional_chaining, )
+- Eh, might as well (arena, macros, null_conditional_chaining, metaprogramming)
 
 ---
 Here is a quick summary of the smaller headers:
@@ -41,9 +41,12 @@ Here is a quick summary of the smaller headers:
 - string_utils.hpp
   - Provides the TemplateString class, a way of creating and manipulating strings at compile time.
   - Provides stpcpy, a portable version of POSIX's stpcpy.
-- vector16.hpp
+- vectors/vector16.hpp
   - Vector using u32's for size and capacity, lowering the vector's overhead to 16 bytes.
   - Has the same QOL additions as releasing vector minus the safe releasing functionality.
+- vectors/swap_vector.hpp
+  - Vector that allows you to linearly search for an element using a custom predicate.
+  - Found elements are moved towards the back of the array for faster search in the future.
 ---
 ###  owned.hpp
 owned_ptr, A version of unique_ptr without deletion. <br>
@@ -67,57 +70,52 @@ An implementation of a vector able to 'release' ownership over its internal buff
 If the data is released, but needs to be accessed as if it were a vector again, a new releasing_vector can claim ownership. <br>
 When the data is no longer needed, the pointer can handle its own destruction through a method. <br>
 Iterator invalidation rules are consistent with std::vector. 
-- After release iterators are guaranteed remain valid, provided the data is not reclaimed by another vector.
+- After release iterators are guaranteed to remain valid, provided the data is not reclaimed by another vector.
 
 'Settings' are provided allowing you to specify:
 - Expansion multiplier.
-- Whether the vector allocates a header alongside the data or provides the user with a handle.
 - Whether to enable string capabilities (will always release a null terminated array).
 
 Note that no exception safety is guaranteed, because exceptions are lame and I don't care.
-- As such, the noexcept status of any given method is determined by whether the allocator and/or value type is noexcept.
-
-Essentially all methods are constexpr.
+- As such, the noexcept status of any given method is determined by whether the allocator and/or value type is noexcept for that task.
 
 API:
 ```cpp
-//constexpr and noexcept will be excluded for brevity.
-//methods that are identical to their std::vector counterparts will be excluded too.
+// constexpr and noexcept will be excluded for brevity.
+// methods that are identical to their std::vector counterparts will be excluded too.
     
 /*  Constructors / Assignment */
 
     template <sz_t N> 
-    explicit (flags::ReserveInitial<N>); //pass in a flags::reserve_initial<N> instance 
+    explicit (flags::ReserveInitial<N>); // pass in a flags::reserve_initial<N> instance 
     
-    explicit (released_ptr released_data) requires store_header;    //reclaims ownership over data previously released
-    explicit (released_span released_data) requires store_header;   //same as above
+    explicit (released_ptr released_data) requires store_header;    // reclaims ownership over data previously released
+    explicit (released_span released_data) requires store_header;   // same as above
      
-    //copy constructor / assignment not implemented at the moment.
+    // copy constructor / assignment not implemented at the moment.
  
-    //move constructor / assignment / swap defined only for releasing vectors with compatable settings
-    //settings are compatable if their StoreHeader value is the same 
+    // move constructor / assignment / swap defined only for releasing vectors with compatable settings
+    // settings are compatable if their CString value is the same 
+    
 /*  Constructors / Assignment */
 
 /*  Release and Deletion */
 
-    //releases the data in the form of a released_ptr / released_span
-    released_ptr release() requires store_header; 
-    released_span release_span() requires store_header; 
+    // releases the data in the form of a released_ptr / released_span
+    released_ptr release(); 
+    released_span release_span(); 
     
-    //releases a handle for the data containing the allocator, owned_ptr<T[]>, size, and capacity
-    //the handle's destructor will destroy and deallocate the data properly
-    data_handle release() requires (not store_header);
+    // destroys and deallocates the released data when it is no longer needed
+    static void destroy_and_dellocate(released_ptr data); 
     
-    //destroys and deallocates the released data when it is no longer needed
-    static void destroy_and_dellocate(released_ptr data) requires store_header; 
+    // returns a released_ptr to element-wise copied array
+    // equivalent to constructing a new releasing_vector, reserving the exact size, copying all elements into it, then releasing
+    static released_ptr copy_data(const released_ptr& data) requires copy_constructible<T>;
     
-    //returns a released_ptr to element-wise copied array, including a new header
-    //equivalent to constructing new releasing_vector, reserving the exact size, copying all elements into it, then releasing
-    static released_ptr copy_data(const released_ptr& data) requires store_header and copy_constructible<T>;
+    // returns the size or capacity of the data
+    static sz_t data_size(const released_ptr& data);
+    static sz_t data_capacity(const released_ptr& data);
     
-    //returns the size or capacity of the data
-    static sz_t data_size(const released_ptr& data) require store_header;
-    static sz_t data_capacity(const released_ptr& data) require store_header;
 /*  Release and Deletion */
 
 /*  Additional Utilities */
@@ -126,26 +124,23 @@ API:
     std::span<T> to_span() const;
     
     /* CString specific utilities */ 
-    template <sz_t N>
-    explicit (const char(&c_str)[N]) requires is_string; //string literal constructor
+    template <sz_t N> explicit (const char(&c_str)[N]); // string literal constructor
     
     operator std::string_view() const;
     std::string_view to_stringview() const;
     explicit operator std::string() const;
     std::string to_stdstring() const;
+
+    template<sz_t N> bool operator==(const std::string& std_str);  
+    template<sz_t N> bool operator==(const char(&c_str)[N]);
     
-    template<sz_t N>
-    bool operator==(const char(&c_str)[N]);
-    
-    template<sz_t N>
-    bool operator==(const std::string& std_str);  
     /* CString specific utilities */
 
 /*  Additional Utilities */
    
 ```
 
-### metaprogramming.hpp
+### metaprogramming/type_class.hpp
 Introduces the 'type' class, allowing for more convenient template meta-programming and the representation of types as first-class citizens. <br>
 Also features an implementation of type_list and a 'nontype_list'. <br>
 

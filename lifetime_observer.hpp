@@ -1,10 +1,10 @@
 #pragma once
-#include "metaprogramming.hpp"
+#include "metaprogramming/type_class.hpp"
 #include "typedefs.hpp"
-#include <string>
-#include <vector>
 
 #include <format>
+#include <string>
+#include <vector>
 
 namespace eden {
 

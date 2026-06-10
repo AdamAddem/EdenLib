@@ -1,5 +1,5 @@
 #pragma once
-#include "metaprogramming.hpp"
+#include "metaprogramming/type_class.hpp"
 
 namespace eden {
 template <class T, class First, class... Remaining>

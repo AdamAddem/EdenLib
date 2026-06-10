@@ -59,10 +59,9 @@ static constexpr const char(&append_number_to_literal)[str_size+22] = append_num
 // returns a pointer to the end of the destination string
 // assumes src and dest are pointing to different buffers
 // assumes neither ptr is null
-eden_nonull_args
-[[nodiscard]] static constexpr char*
-stpcpy(char* eden_restrict dest, const char* eden_restrict src) noexcept {
-  assume_assert(dest); assume_assert(src); assume_assert(dest not_eq src);
+[[nodiscard]] constexpr char*
+stpcpy_restrict(char* eden_restrict dest, const char* eden_restrict src) noexcept {
+  assume_assert(dest); assume_assert(src);
   while (true) {
     *dest = *src;
     ++dest; ++src;
@@ -71,6 +70,71 @@ stpcpy(char* eden_restrict dest, const char* eden_restrict src) noexcept {
   }
 
   return dest;
+}
+
+// an implementation of POSIX's stpcpy
+// returns a pointer to the end of the destination string
+// assumes neither ptr is null
+[[nodiscard]] constexpr char*
+stpcpy(char* dest, const char* src) noexcept {
+  assume_assert(dest); assume_assert(src);
+  while (true) {
+    *dest = *src;
+    ++dest; ++src;
+    if (*src == '\0')
+      break;
+  }
+
+  return dest;
+}
+
+[[nodiscard]] constexpr bool
+streq_restrict(const char* eden_restrict first, const char* eden_restrict second, sz_t len) noexcept {
+  assume_assert(first); assume_assert(second);
+  auto i{0uz};
+  while (i not_eq len) {
+    if (first[i] not_eq second[i])
+      return false;
+    ++i;
+  }
+  return true;
+}
+
+[[nodiscard]] constexpr bool
+streq_restrict(const char* eden_restrict first, const char* eden_restrict second) noexcept {
+  assume_assert(first); assume_assert(second);
+
+  auto i{0uz};
+  while (true) {
+    if (first[i] not_eq second[i])
+      return false;
+    if (first[i] == '\0')
+      return true;
+    ++i;
+  }
+}
+
+[[nodiscard]] constexpr bool
+streq(const char* first, const char* second, sz_t len) noexcept {
+  auto i{0uz};
+  while (i not_eq len) {
+    if (first[i] not_eq second[i])
+      return false;
+    ++i;
+  }
+  return true;
+}
+
+[[nodiscard]] constexpr bool
+streq(const char* first, const char* second) noexcept {
+  auto i{0uz};
+  while (true) {
+    if (first[i] not_eq second[i])
+      return false;
+    if (first[i] == '\0')
+      return true;
+    ++i;
+  }
 }
 
 }

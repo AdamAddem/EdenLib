@@ -1,5 +1,7 @@
 #pragma once
 #include "typedefs.hpp"
+#include "string_utils.hpp"
+
 #include <cstring>
 #include <span>
 #include <string>
@@ -49,29 +51,7 @@ namespace eden {
  *  -length() const; //returns array bound - 1 if bounded, otherwise strlen()
  */
 
-[[nodiscard]] static constexpr bool
-streq(const char* first, const char* second, sz_t len) noexcept {
-  auto i{0uz};
-  while (i not_eq len) {
-    if (first[i] not_eq second[i])
-      return false;
-    ++i;
-  }
-  return true;
-}
 
-[[nodiscard]] static constexpr bool
-streq(const char* first, const char* second) noexcept {
-  auto i{0uz};
-  while (true) {
-    if (first[i] not_eq second[i])
-      return false;
-    if (first[i] == '\0')
-      return true;
-    ++i;
-  }
-  std::unreachable();
-}
 
 template <class T>
 class owned_ptr {
@@ -237,7 +217,7 @@ requires (Extent > 0)
 class owned_span {
   static constexpr bool dynamicly_sized = (Extent == std::dynamic_extent);
   static constexpr bool is_string = same_c<T, char>;
-  static constexpr bool elements_comparable = requires (T a, T b) {a == b;};
+  static constexpr bool elements_comparable = requires (T a, T b) { a == b; };
 
   T* internal;
   [[no_unique_address]]

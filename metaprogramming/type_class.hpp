@@ -1,6 +1,6 @@
 #pragma once
-#include "string_utils.hpp"
-#include "typedefs.hpp"
+#include "../string_utils.hpp"
+#include "../typedefs.hpp"
 
 #include <array>
 #include <concepts>
@@ -9,20 +9,6 @@
 #include <type_traits>
 
 namespace eden {
-
-template <class Alloc, class T>
-concept allocator_for_c = requires (Alloc a, T* p, std::size_t n) {
-  typename std::allocator_traits<Alloc>::value_type;
-  typename std::allocator_traits<Alloc>::pointer;
-  typename std::allocator_traits<Alloc>::const_pointer;
-  typename std::allocator_traits<Alloc>::void_pointer;
-  typename std::allocator_traits<Alloc>::const_void_pointer;
-  typename std::allocator_traits<Alloc>::difference_type;
-  typename std::allocator_traits<Alloc>::size_type;
-  {std::allocator_traits<Alloc>::allocate(a, n)} -> std::same_as<typename std::allocator_traits<Alloc>::pointer>;
-  std::allocator_traits<Alloc>::deallocate(a, p, n);
-  Alloc(a);
-};
 
 //Forward Tuple implementation was shamelessly stolen from someone on stackoverflow
 //Thank you!
@@ -65,7 +51,6 @@ ForwardTuple(const Ts&...) -> ForwardTuple<Ts...>;
 
 template<class First, class... Rest> struct type_list;
 template<auto First, auto... Rest> struct nontype_list;
-
 
 /* type class */
 template <class T, TemplateString name_str = TemplateString<0>{}>
@@ -576,30 +561,5 @@ struct class_reflection {
   }
 };
 /* i totally forgot what this was */
-
-
-/* General Concepts */
-template <class T> concept pointer_c = std::is_pointer_v<T>;
-template <class T> concept enum_c = std::is_enum_v<T>;
-template <class T> concept void_c = std::is_void_v<T>;
-template <class T, class U> concept same_c = std::is_same_v<T, U>;
-template <class T, class U> concept different_c = not std::is_same_v<T, U>;
-
-template <class T> concept default_constructible_c = std::is_default_constructible_v<T>;
-template <class T> concept nothrow_default_constructible_c = std::is_nothrow_default_constructible_v<T>;
-template <class T, class... Args> concept constructible_with_c = std::is_constructible_v<T, Args...>;
-template <class T, class... Args> concept nothrow_constructible_with_c = std::is_nothrow_constructible_v<T, Args...>;
-
-template <class T> concept copy_constructible_c = std::is_copy_constructible_v<T>;
-template <class T> concept copy_assignable_c = std::is_copy_assignable_v<T>;
-template <class T> concept nothrow_copy_constructible_c = std::is_nothrow_copy_constructible_v<T>;
-template <class T> concept nothrow_copy_assignable_c = std::is_nothrow_copy_assignable_v<T>;
-
-template <class T> concept move_constructible_c = std::is_move_constructible_v<T>;
-template <class T> concept move_assignable_c = std::is_move_assignable_v<T>;
-template <class T> concept nothrow_move_constructible_c = std::is_nothrow_move_constructible_v<T>;
-template <class T> concept nothrow_move_assignable_c = std::is_nothrow_move_assignable_v<T>;
-/* General Concepts */
-
 
 }

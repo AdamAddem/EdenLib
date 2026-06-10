@@ -1,9 +1,10 @@
 #pragma once
-#include "macros.hpp"
-#include "metaprogramming.hpp"
-#include "owned.hpp"
-#include "type_flags.hpp"
-#include "typedefs.hpp"
+#include "../macros.hpp"
+#include "../metaprogramming/concepts.hpp"
+#include "../metaprogramming/type_class.hpp"
+#include "../owned.hpp"
+#include "../type_flags.hpp"
+#include "../typedefs.hpp"
 #include <format>
 #include <memory>
 #include <ranges>
@@ -23,12 +24,12 @@ struct releasing_vector_settings {
   static constexpr bool is_string = CString;
 };
 
-template <class T, releasing_vector_settings settings = releasing_vector_settings{}, allocator_for_c<T> Allocator = std::allocator<T>>
+template <class T, auto settings = releasing_vector_settings{}, allocator_for_c<T> Allocator = std::allocator<T>>
 requires (settings.is_string ? (sizeof(T) == 1 and type<T>::is_integral) : true) and
          (std::allocator_traits<Allocator>::propagate_on_container_move_assignment::value)
 class releasing_vector {
   static constexpr bool is_string = settings.is_string;
-  static constexpr sz_t expansion_mult = settings.expansion_mult;
+  static constexpr u64_t expansion_mult = settings.expansion_mult;
   static constexpr bool trivially_destructible = std::is_trivially_destructible_v<T>;
 
   struct header {
@@ -431,26 +432,30 @@ public:
   }
 
   [[nodiscard]] constexpr T&
-  at(sz_t pos) {
-    if (m_begin + pos >= m_size)
-      throw std::out_of_range(std::format("Element access at index {} in eden::releasing_vector with size of {}.", pos, size()));
-    return *(m_begin + pos);
+  at(sz_t idx) {
+    if (m_begin + idx >= m_size)
+      throw std::out_of_range(std::format("Element access at index {} in eden::releasing_vector with size of {}.", idx, size()));
+    return m_begin[idx];
   }
 
   [[nodiscard]] constexpr const T&
-  at(sz_t pos) const {
-    if (m_begin + pos >= m_size)
-      throw std::out_of_range(std::format("Element access at index {} in eden::releasing_vector with size of {}.", pos, size()));
-    return *(m_begin + pos);
+  at(sz_t idx) const {
+    if (m_begin + idx >= m_size)
+      throw std::out_of_range(std::format("Element access at index {} in eden::releasing_vector with size of {}.", idx, size()));
+    return m_begin[idx];
   }
 
   [[nodiscard]] constexpr T&
-  operator[](sz_t pos) noexcept
-  {assume_assert(m_begin); return *(m_begin + pos);}
+  operator[](sz_t idx) noexcept {
+    assume_assert(m_begin); assert(idx < size());
+    return m_begin[idx];
+  }
 
   [[nodiscard]] constexpr const T&
-  operator[](sz_t pos) const noexcept
-  {assume_assert(m_begin); return *(m_begin + pos);}
+  operator[](sz_t idx) const noexcept {
+    assume_assert(m_begin); assert(idx < size());
+    return m_begin[idx];
+  }
 
   [[nodiscard]] constexpr iterator
   begin() noexcept
@@ -510,11 +515,11 @@ public:
 
   [[nodiscard]] constexpr T&
   back() noexcept
-  {assume_assert(m_size); return *(m_size - 1);}
+  {assume_assert(m_size); return m_size[-1];}
 
   [[nodiscard]] constexpr const T&
   back() const noexcept
-  {assume_assert(m_size); return *(m_size - 1);}
+  {assume_assert(m_size); return m_size[-1];}
 
   // If this is a string, this will NOT return a null terminated string.
   [[nodiscard]] constexpr T*

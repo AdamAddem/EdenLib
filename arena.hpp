@@ -1,5 +1,6 @@
 #pragma once
-#include "metaprogramming.hpp"
+#include "metaprogramming/concepts.hpp"
+#include "metaprogramming/type_class.hpp"
 #include "typedefs.hpp"
 
 #include <memory>
@@ -78,6 +79,7 @@ public:
   [[nodiscard]] constexpr ArenaAllocator&
   operator=(const ArenaAllocator& other) noexcept = default;
 };
+
 static_assert(allocator_for_c<ArenaAllocator<int>, int>);
 
 }

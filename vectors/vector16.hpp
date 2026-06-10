@@ -1,8 +1,9 @@
 #pragma once
-#include "macros.hpp"
-#include "metaprogramming.hpp"
-#include "type_flags.hpp"
-#include "typedefs.hpp"
+#include "../macros.hpp"
+#include "../metaprogramming/concepts.hpp"
+#include "../metaprogramming/type_class.hpp"
+#include "../type_flags.hpp"
+#include "../typedefs.hpp"
 
 #include <format>
 #include <memory>
@@ -12,7 +13,7 @@
 namespace eden {
 template <u64_t ExpansionMult = 2,
           bool CString = false>
-requires (ExpansionMult > 1)
+requires (ExpansionMult >= 2)
 struct vector16_settings {
   static constexpr u64_t expansion_mult = ExpansionMult;
   static constexpr bool is_string = CString;
@@ -351,26 +352,30 @@ public:
   }
 
   [[nodiscard]] constexpr T&
-  at(u32_t pos) {
-    if (m_begin + pos >= m_size)
-      throw std::out_of_range(std::format("Element access at index {} in eden::vector16 with size of {}.", pos, size()));
-    return *(m_begin + pos);
+  at(u32_t idx) {
+    if (m_begin + idx >= m_size)
+      throw std::out_of_range(std::format("Element access at index {} in eden::vector16 with size of {}.", idx, size()));
+    return m_begin[idx];
   }
 
   [[nodiscard]] constexpr const T&
-  at(u32_t pos) const {
-    if (m_begin + pos >= m_size)
-      throw std::out_of_range(std::format("Element access at index {} in eden::vector16 with size of {}.", pos, size()));
-    return *(m_begin + pos);
+  at(u32_t idx) const {
+    if (m_begin + idx >= m_size)
+      throw std::out_of_range(std::format("Element access at index {} in eden::vector16 with size of {}.", idx, size()));
+    return m_begin[idx];
   }
 
   [[nodiscard]] constexpr T&
-  operator[](u32_t pos) noexcept
-  {assume_assert(m_begin); return *(m_begin + pos);}
+  operator[](u32_t idx) noexcept {
+    assume_assert(m_begin); assert(idx < m_size);
+    return m_begin[idx];
+  }
 
   [[nodiscard]] constexpr const T&
-  operator[](u32_t pos) const noexcept
-  {assume_assert(m_begin); return *(m_begin + pos);}
+  operator[](u32_t idx) const noexcept {
+    assume_assert(m_begin); assert(idx < m_size);
+    return m_begin[idx];
+  }
 
   [[nodiscard]] constexpr iterator
   begin() noexcept
@@ -435,24 +440,23 @@ public:
   [[nodiscard]] constexpr T&
   back() noexcept {
     assume_assert(m_begin); assume_assert(m_size >= 1);
-    return *(m_begin + (m_size - 1));
+    return m_begin[m_size - 1];
   }
 
   [[nodiscard]] constexpr const T&
   back() const noexcept {
     assume_assert(m_begin); assume_assert(m_size >= 1);
-    return *(m_begin + (m_size - 1));
+    return m_begin[m_size - 1];
   }
 
   // Will NOT return a null terminated string.
   [[nodiscard]] constexpr T*
   data() const noexcept { return m_begin; }
 
-
   // RAII opt out. Will return a null terminated string if string is chosen.
   // Tuple is: ptr, size, capacity, moved allocator
   [[nodiscard]] constexpr std::tuple<T*, u32_t, u32_t, Allocator>
-  dangerous_release() noexcept {
+  release_unsafe() noexcept {
     if constexpr (is_string) {
       if (m_size == m_cap)
         expand_to(m_cap + 1);
