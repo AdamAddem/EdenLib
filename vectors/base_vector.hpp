@@ -10,24 +10,30 @@
 #include <string>
 
 namespace eden {
-template <u64_t ExpansionMult = 2>
+
+// Small will reduce the vector's size to 16 bytes on 64bit systems by storing a pointer and two u32s.
+// Will be disabled no matter what if the system has a < 8byte pointer size.
+template <bool Small = false, u64_t ExpansionMult = 2>
 requires (ExpansionMult > 1)
-struct basic_vector_template_settings {
+struct base_vector_settings {
   static constexpr u64_t expansion_mult = ExpansionMult;
+  static constexpr bool is_small = sizeof(void*) >= 8 ? Small : false;
 };
 
 
 /* Not meant for real use. This is here so any special implementations of vector don't have to write this boilerplate. */
 /* If you intend to use this as a template for your own implementation, note that there is zero exception safety and copy constructor/assignment are unimplemented. */
-template <class T, basic_vector_template_settings settings = basic_vector_template_settings{}, allocator_for_c<T> Allocator = std::allocator<T>>
-requires std::allocator_traits<Allocator>::propagate_on_container_move_assignment::value
-class basic_vector_template {
+template <class T, base_vector_settings settings = base_vector_settings{}, allocator_for_c<T> Allocator = std::allocator<T>>
+requires (move_constructible_c<T> or copy_constructible_c<T>) and std::allocator_traits<Allocator>::propagate_on_container_move_assignment::value
+class base_vector {
+protected:
   static constexpr u64_t expansion_mult = settings.expansion_mult;
-  static constexpr bool trivially_destructible = std::is_trivially_destructible_v<T>;
+  static constexpr bool is_small = settings.is_small;
 
+  static constexpr bool trivially_destructible = std::is_trivially_destructible_v<T>;
   static constexpr bool default_constructible = std::is_default_constructible_v<T>;
-  static constexpr bool move_constructible = std::is_move_constructible_v<T>;
   static constexpr bool copy_constructible = std::is_copy_constructible_v<T>;
+  static constexpr bool move_constructible = std::is_move_constructible_v<T>;
   static constexpr bool nothrow_default_constructible = std::is_nothrow_default_constructible_v<T>;
   static constexpr bool nothrow_move_construct = std::is_nothrow_move_constructible_v<T>;
   static constexpr bool nothrow_copy_construct = std::is_nothrow_copy_constructible_v<T>;
@@ -39,74 +45,106 @@ class basic_vector_template {
   static constexpr bool nothrow_allocating = noexcept(m_alloc.allocate(1));
   static constexpr bool nothrow_deallocating = noexcept(m_alloc.deallocate(static_cast<T*>(nullptr), 1));
 
-  T* m_begin{nullptr};
-  T* m_size{nullptr};
-  T* m_cap{nullptr};
+  T* m_begin{};
 
-  constexpr void allocate_from_empty(sz_t count)
+  std::conditional_t<is_small, u32_t, T*> m_size{};
+  std::conditional_t<is_small, u32_t, T*> m_cap{};
+
+  constexpr void zero_members() noexcept {
+    if constexpr (is_small) m_begin = nullptr, m_size = 0, m_cap = 0;
+    else m_cap = m_size = m_begin = nullptr;
+  }
+
+  using count_t = std::conditional_t<is_small, u32_t, sz_t>;
+  constexpr void allocate_from_empty(count_t count)
   noexcept(nothrow_allocating) {
-    assume_assert(m_begin == nullptr);
-    assume_assert(m_size == nullptr);
-    assume_assert(m_cap == nullptr);
-
-    m_size = m_begin = m_alloc.allocate(count);
-    m_cap = m_begin + count;
+    if constexpr (is_small) {
+      assume_assert(m_begin == nullptr);
+      assume_assert(m_size == 0);
+      assume_assert(m_cap == 0);
+      m_begin = m_alloc.allocate(count);
+      m_cap = count;
+    }
+    else {
+      assume_assert(m_begin == nullptr);
+      assume_assert(m_size == nullptr);
+      assume_assert(m_cap == nullptr);
+      m_size = m_begin = m_alloc.allocate(count);
+      m_cap = m_begin + count;
+    }
   }
 
   constexpr void deallocate()
   noexcept(nothrow_deallocating) {
-    if (m_begin == nullptr)
-      return;
+    if (m_begin == nullptr) return;
 
     m_alloc.deallocate(m_begin,  capacity());
-    m_cap = m_size = m_begin = nullptr;
+    zero_members();
   }
 
   constexpr void destroy()
   noexcept(nothrow_destruct) {
     if (m_begin == nullptr) return;
 
-    while (m_size not_eq m_begin)
-      alloc_traits::destroy(m_alloc, --m_size);
+    if constexpr (is_small) {
+      while (m_size not_eq 0) alloc_traits::destroy(m_alloc, (--m_size) + m_begin);
+    }
+    else {
+      while (m_size not_eq m_begin) alloc_traits::destroy(m_alloc, --m_size);
+    }
   }
 
   template <class ...Args>
-  constexpr void allocate_and_construct(sz_t count, Args&&... args)
+  constexpr void allocate_and_construct(count_t count, Args&&... args)
   noexcept(nothrow_constructible_with_c<T, Args...>)
   requires constructible_with_c<T, Args...> {
     allocate_from_empty(count);
-    while (m_size not_eq m_cap)
-      alloc_traits::construct(m_alloc, m_size++, std::forward<Args>(args)...);
+
+    while (m_size not_eq m_cap) {
+      if constexpr(is_small)
+        alloc_traits::construct(m_alloc, m_begin + m_size++, std::forward<Args>(args)...);
+      else
+        alloc_traits::construct(m_alloc, m_size++, std::forward<Args>(args)...);
+    }
   }
 
-  constexpr void expand_to(sz_t count)
-  noexcept(nothrow_move_construct or nothrow_copy_construct)
-  requires (move_constructible or copy_constructible) {
+  constexpr void expand_to(count_t count)
+  noexcept(nothrow_move_construct or nothrow_copy_construct) {
     assert(count >= size());
     T* new_buff = m_alloc.allocate(count);
     auto i{0uz};
-    while ((m_begin + i) not_eq m_size) {
+
+    if constexpr(is_small) {
+      if (count < m_cap) {
+        std::print("It seems like a small eden::vector overflowed. Old capacity: {} attempted to expand to {}.", m_cap, count);
+        eden_unreachable("oopsie!");
+      }
+    }
+
+    auto const sz = size();
+    while (i < sz) {
       alloc_traits::construct(m_alloc, new_buff + i, std::move_if_noexcept(*(m_begin + i)));
       ++i;
     }
-
     destroy(); deallocate();
     m_begin = new_buff;
-    m_size = m_begin + i;
-    m_cap = m_begin + count;
+
+    if constexpr (is_small) m_cap = count;
+    else m_size = m_begin + i, m_cap = m_begin + count;
   }
 
-  constexpr void destroy_n_backwards(sz_t n)
+  constexpr void destroy_n_backwards(count_t n)
   noexcept(nothrow_destruct) {
     assume_assert(m_begin); assert(size() >= n);
     while (n-- > 0)
-      alloc_traits::destroy(m_alloc, --m_size);
+      if constexpr (is_small) alloc_traits::destroy(m_alloc, m_begin + --m_size);
+      else alloc_traits::destroy(m_alloc, --m_size);
   }
 
 public:
 
-  template<basic_vector_template_settings other>
-  static constexpr bool compatible_settings = true;
+  template<base_vector_settings other>
+  static constexpr bool compatible_settings = other.is_small = is_small;
 
   struct const_iterator {
     using iterator_category = std::contiguous_iterator_tag;
@@ -268,41 +306,44 @@ public:
   using const_reverse_iterator = std::reverse_iterator<const_iterator>;
   using reverse_iterator = std::reverse_iterator<iterator>;
 
-  constexpr basic_vector_template()
+  constexpr base_vector()
   noexcept(std::is_nothrow_default_constructible_v<Allocator>) = default;
 
-  template <sz_t N>
+  template <count_t N>
   constexpr explicit
-  basic_vector_template(flags::ReserveInitial<N>)
+  base_vector(flags::ReserveInitial<N>)
   noexcept(nothrow_allocating)
   { allocate_from_empty(N); }
 
   constexpr explicit
-  basic_vector_template(const Allocator &alloc) noexcept
+  base_vector(const Allocator &alloc)
+  noexcept(std::is_nothrow_copy_constructible_v<Allocator>)
   : m_alloc(alloc) {}
 
   constexpr explicit
-  basic_vector_template(sz_t count, const Allocator &alloc = Allocator())
+  base_vector(count_t count, const Allocator &alloc = Allocator())
   noexcept(noexcept(allocate_and_construct(count)))
+  requires default_constructible
   : m_alloc(alloc) { allocate_and_construct(count); }
 
-  constexpr basic_vector_template(sz_t count, const T& value, const Allocator &alloc = Allocator())
+  constexpr base_vector(count_t count, const T& value, const Allocator &alloc = Allocator())
   noexcept(nothrow_copy_construct)
   requires copy_constructible
   : m_alloc(alloc) { allocate_and_construct(count, std::forward<T>(value)); }
 
-  constexpr basic_vector_template(const basic_vector_template&) = delete; // TODO: This
-  constexpr basic_vector_template& operator=(const basic_vector_template&) = delete; // TODO: This
+  constexpr base_vector(const base_vector&) = delete; // TODO: This
+  constexpr base_vector& operator=(const base_vector&) = delete; // TODO: This
 
-  template <basic_vector_template_settings other_settings, allocator_for_c<T> other_allocator>
+  template <base_vector_settings other_settings, allocator_for_c<T> other_allocator>
   requires compatible_settings<other_settings> and same_c<Allocator, other_allocator>
-  constexpr basic_vector_template(basic_vector_template<T, other_settings, other_allocator> &&other) noexcept
+  constexpr base_vector(base_vector<T, other_settings, other_allocator> &&other)
+  noexcept(nothrow_move_constructible_c<Allocator>)
   : m_alloc(std::move(other.m_alloc)), m_begin(other.m_begin), m_size(other.m_size), m_cap(other.m_cap)
-  { other.m_begin = other.m_size = other.m_cap = nullptr; }
+  { other.zero_members(); }
 
-  template <basic_vector_template_settings other_settings, allocator_for_c<T> other_allocator>
+  template <base_vector_settings other_settings, allocator_for_c<T> other_allocator>
   requires compatible_settings<other_settings> and same_c<Allocator, other_allocator>
-  constexpr void swap(basic_vector_template<T, other_settings, other_allocator>& other) noexcept {
+  constexpr void swap(base_vector<T, other_settings, other_allocator>& other) noexcept {
     if constexpr (alloc_traits::propagate_on_container_swap)
       std::swap(m_alloc, other.m_alloc);
     else
@@ -312,48 +353,46 @@ public:
     std::swap(m_cap, other.m_cap); std::swap(m_alloc, other.m_alloc);
   }
 
-  constexpr ~basic_vector_template()
+  constexpr ~base_vector()
   noexcept(nothrow_destruct and nothrow_deallocating) {
-    if (m_begin == nullptr)
-      return;
-
-    destroy();
-    deallocate();
+    if (m_begin == nullptr) return;
+    destroy(); deallocate();
   }
 
-  template <basic_vector_template_settings other_settings, allocator_for_c<T> other_allocator>
+  template <base_vector_settings other_settings, allocator_for_c<T> other_allocator>
   requires compatible_settings<other_settings> and same_c<Allocator, other_allocator>
-  constexpr basic_vector_template&
-  operator=(basic_vector_template<T, other_settings, other_allocator> &&other) noexcept {
+  constexpr base_vector&
+  operator=(base_vector<T, other_settings, other_allocator> &&other)
+  noexcept(nothrow_move_constructible_c<Allocator>) {
     destroy(); deallocate();
     m_alloc = std::move(other.m_alloc);
     m_begin = other.m_begin; m_size = other.m_size; m_cap = other.m_cap;
-    other.m_begin = other.m_size = other.m_cap = nullptr;
+    other.zero_members();
     return *this;
   }
 
   [[nodiscard]] constexpr T&
-  at(sz_t idx) {
+  at(count_t idx) {
     if (m_begin + idx >= m_size)
-      throw std::out_of_range(std::format("Element access at index {} in eden::basic_vector_template with size of {}.", idx, size()));
+      throw std::out_of_range(std::format("Element access at index {} in eden::base_vector with size of {}.", idx, size()));
     return m_begin[idx];
   }
 
   [[nodiscard]] constexpr const T&
-  at(sz_t idx) const {
+  at(count_t idx) const {
     if (m_begin + idx >= m_size)
-      throw std::out_of_range(std::format("Element access at index {} in eden::basic_vector_template with size of {}.", idx, size()));
+      throw std::out_of_range(std::format("Element access at index {} in eden::base_vector with size of {}.", idx, size()));
     return m_begin[idx];
   }
 
   [[nodiscard]] constexpr T&
-  operator[](sz_t idx) noexcept {
+  operator[](count_t idx) noexcept {
     assume_assert(m_begin); assert(idx < size());
     return m_begin[idx];
   }
 
   [[nodiscard]] constexpr const T&
-  operator[](sz_t idx) const noexcept {
+  operator[](count_t idx) const noexcept {
     assume_assert(m_begin); assert(idx < size());
     return m_begin[idx];
   }
@@ -423,19 +462,12 @@ public:
   {assume_assert(m_size); return m_size[-1];}
 
   [[nodiscard]] constexpr T*
-  data() noexcept { return m_begin; }
+  data() noexcept
+  { return m_begin; }
 
   [[nodiscard]] constexpr const T*
-  data() const noexcept { return m_begin; }
-
-  // RAII opt out.
-  // Tuple is: ptr, end_size_ptr, end_capacity_ptr, moved allocator
-  [[nodiscard]] constexpr std::tuple<T*, T*, T*, Allocator>
-  release_unsafe() noexcept {
-    auto ret = std::tuple(m_begin, m_size, m_cap, std::move(m_alloc));
-    m_cap = m_size = m_begin = nullptr;
-    return ret;
-  }
+  data() const noexcept
+  { return m_begin; }
 
   [[nodiscard]] constexpr explicit
   operator std::span<T>() const noexcept
@@ -443,47 +475,51 @@ public:
 
   [[nodiscard]] constexpr std::span<T>
   to_span() const noexcept
-  { return (*this).operator std::span<T>(); }
+  { return this->operator std::span<T>(); }
 
   [[nodiscard]] constexpr bool
-  empty() const noexcept
-  {return m_size == m_begin;}
+  empty() const noexcept {
+    if constexpr(is_small) return m_size == 0;
+    else return m_size == m_begin;
+  }
 
-  [[nodiscard]] constexpr sz_t
-  size() const noexcept
-  {return m_size - m_begin;}
+  [[nodiscard]] constexpr count_t
+  size() const noexcept {
+    if constexpr (is_small) return m_size;
+    else return m_size - m_begin;
+  }
 
-  constexpr void reserve(sz_t new_capacity) noexcept {
+  constexpr void reserve(count_t new_capacity) noexcept {
     if (m_begin == nullptr)
       allocate_from_empty(new_capacity);
     else if (capacity() < new_capacity)
       expand_to(new_capacity);
   }
 
-  constexpr void resize(sz_t count) noexcept
+  constexpr void resize(count_t count) noexcept
   requires default_constructible {
-    if (m_begin == nullptr)
-      return allocate_and_construct(count);
+    if (m_begin == nullptr) return allocate_and_construct(count);
 
-    const sz_t current_size = size();
+    auto const current_size = size();
     if (current_size >= count)
       return destroy_n_backwards(current_size - count);
 
     if (capacity() < count)
       expand_to(count);
 
-    const auto num_default{count - size()};
-    auto i{0uz};
+    auto const num_default{count - size()};
+    count_t i{};
     while (i++ < num_default)
-      alloc_traits::construct(m_alloc, m_size++);
+      if constexpr (is_small) alloc_traits::construct(m_alloc, m_begin + m_size++);
+      else  alloc_traits::construct(m_alloc, m_size++);
   }
 
-  constexpr void resize(sz_t count, const T& value) noexcept
+  constexpr void resize(count_t count, const T& value) noexcept
   requires copy_constructible {
     if (m_begin == nullptr)
       return allocate_and_construct(count, value);
 
-    const sz_t current_size = size();
+    auto const current_size = size();
     if (current_size >= count)
       return destroy_n_backwards(current_size - count);
 
@@ -491,21 +527,25 @@ public:
       expand_to(count);
 
     const auto num_default{count - size()};
-    auto i{0uz};
+    count_t i{};
     while (i++ < num_default)
-      alloc_traits::construct(m_alloc, m_size++, value);
+      if constexpr (is_small) alloc_traits::construct(m_alloc, m_begin + m_size++, value);
+      else alloc_traits::construct(m_alloc, m_size++, value);
   }
 
-  [[nodiscard]] constexpr sz_t
-  capacity() const noexcept
-  { return m_cap - m_begin; }
+  [[nodiscard]] constexpr count_t
+  capacity() const noexcept {
+    if constexpr(is_small) return m_cap;
+    else  return m_cap - m_begin;
+  }
 
   constexpr void shrink_to_fit() const noexcept {
     if (size() not_eq capacity())
       expand_to(size());
   }
 
-  constexpr void clear() noexcept { destroy(); }
+  constexpr void clear() noexcept
+  { destroy(); }
 
   template <class... Args> constexpr T&
   emplace_back(Args&&... args)
@@ -516,8 +556,15 @@ public:
     else if (m_size == m_cap)
       expand_to(capacity() * expansion_mult);
 
-    alloc_traits::construct(m_alloc, m_size, std::forward<Args>(args)...);
-    return *(m_size++);
+    assume_assert(m_begin);
+    if constexpr (is_small) {
+      alloc_traits::construct(m_alloc, m_begin + m_size, std::forward<Args>(args)...);
+      return m_begin[m_size++];
+    }
+    else {
+      alloc_traits::construct(m_alloc, m_size, std::forward<Args>(args)...);
+      return *(m_size++);
+    }
   }
 
   constexpr void push_back(const T& value)
@@ -531,15 +578,17 @@ public:
   { emplace_back(std::forward<T>(value)); }
 
   constexpr void pop_back()
-  noexcept(nothrow_destruct)
-  { assume_assert(m_begin); assume_assert(m_size not_eq m_begin); alloc_traits::destroy(m_alloc, --m_size); }
+  noexcept(nothrow_destruct) {
+    assume_assert(m_begin); assume_assert(m_size not_eq m_begin);
+    if constexpr(is_small) alloc_traits::destroy(m_alloc, m_begin + --m_size);
+    else alloc_traits::destroy(m_alloc, --m_size);
+  }
 };
 
-
-template <class T, basic_vector_template_settings lhs_settings, basic_vector_template_settings rhs_settings, allocator_for_c<T> allocator>
-requires basic_vector_template<T, lhs_settings, allocator>::template compatible_settings<rhs_settings>
+template <class T, base_vector_settings lhs_settings, base_vector_settings rhs_settings, allocator_for_c<T> allocator>
+requires base_vector<T, lhs_settings, allocator>::template compatible_settings<rhs_settings>
 [[nodiscard]] constexpr bool
-operator==(const basic_vector_template<T, lhs_settings, allocator>& lhs, const basic_vector_template<T, rhs_settings, allocator>& rhs) noexcept
+operator==(const base_vector<T, lhs_settings, allocator>& lhs, const base_vector<T, rhs_settings, allocator>& rhs) noexcept
 requires std::equality_comparable<T> {
   const auto sz = lhs.size();
   if (sz not_eq rhs.size())
@@ -551,5 +600,4 @@ requires std::equality_comparable<T> {
   return true;
 }
 
-static_assert(false, "Don't include this header!");
 }
