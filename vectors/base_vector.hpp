@@ -148,7 +148,7 @@ protected:
   }
 
   constexpr ~base_vector()
-  noexcept(nothrow_destruct and nothrow_deallocating) {
+  noexcept(nothrow_destruct) {
     if (m_begin == nullptr) return;
     call_derived destroy(); call_derived deallocate();
   }
@@ -338,14 +338,40 @@ public:
   : m_alloc(alloc)
   { call_derived allocate_and_construct(count); }
 
-  constexpr base_vector(count_t count, const T& value, const Allocator &alloc = Allocator())
+  constexpr base_vector(count_t count, T const& value, Allocator const& alloc = Allocator())
   noexcept(nothrow_copy_construct)
   requires copy_constructible
   : m_alloc(alloc)
   { call_derived allocate_and_construct(count, std::forward<T>(value)); }
 
-  constexpr base_vector(const base_vector&) = delete; // TODO: This
-  constexpr base_vector& operator=(const base_vector&) = delete; // TODO: This
+  constexpr base_vector(base_vector const& other)
+  noexcept(nothrow_copy_construct)
+  requires copy_constructible {
+#define derived_other static_cast<Derived const&>(other)
+    call_derived reserve(derived_other.size());
+    auto curr = derived_other.cbegin();
+    auto const end = derived_other.cend();
+    while (curr not_eq end) {
+      call_derived emplace_back(*curr);
+      ++curr;
+    }
+  }
+
+  constexpr base_vector&
+  operator=(base_vector const& other)
+  noexcept(nothrow_copy_construct)
+  requires copy_constructible {
+    call_derived destroy(); call_derived reserve(derived_other.size());
+    auto curr = derived_other.cbegin();
+    auto const end = derived_other.cend();
+    while (curr not_eq end) {
+      call_derived emplace_back(*curr);
+      ++curr;
+    }
+    return *this;
+  }
+#undef derived_other
+
 
   template <base_vector_settings other_settings, allocator_for_c<T> other_allocator>
   requires compatible_settings<other_settings> and same_c<Allocator, other_allocator>

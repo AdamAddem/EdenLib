@@ -186,30 +186,10 @@ public:
   constexpr releasing_vector(const releasing_vector&) = delete;
   constexpr releasing_vector& operator=(const releasing_vector&) = delete;
 
-  /* template <releasing_vector_settings other_settings, allocator_for_c<T> other_allocator>
-  requires compatible_settings<other_settings> and same_c<Allocator, other_allocator>
-  constexpr releasing_vector(releasing_vector<T, other_settings, other_allocator> &&other) noexcept
-  : m_alloc(std::move(other.m_alloc)), m_begin(other.m_begin), m_size(other.m_size), m_cap(other.m_cap)
-  { other.m_begin = other.m_size = other.m_cap = nullptr; } */
-
-  /* template <releasing_vector_settings other_settings, allocator_for_c<T> other_allocator>
-  requires compatible_settings<other_settings> and same_c<Allocator, other_allocator>
-  constexpr void swap(releasing_vector<T, other_settings, other_allocator>& other) noexcept {
-    if constexpr (alloc_traits::propagate_on_container_swap)
-      std::swap(m_alloc, other.m_alloc);
-    else
-      assume_assert(m_alloc not_eq other.m_alloc and "Undefined behavior if this triggers.");
-
-    std::swap(m_begin, other.m_begin); std::swap(m_size, other.m_size);
-    std::swap(m_cap, other.m_cap); std::swap(m_alloc, other.m_alloc);
-  } */
-
   constexpr ~releasing_vector()
-  noexcept(base::nothrow_destruct and base::nothrow_deallocating) {
+  noexcept(base::nothrow_destruct) {
     if (m_begin == nullptr) return;
-
-    this->destroy();
-    deallocate();
+    this->destroy(); deallocate();
   }
 
   template <releasing_vector_settings other_settings, allocator_for_c<T> other_allocator>

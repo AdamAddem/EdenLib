@@ -40,7 +40,7 @@ template <class T> concept move_constructible_c = std::is_move_constructible_v<T
 template <class T> concept move_assignable_c = std::is_move_assignable_v<T>;
 template <class T> concept nothrow_move_constructible_c = std::is_nothrow_move_constructible_v<T>;
 template <class T> concept nothrow_move_assignable_c = std::is_nothrow_move_assignable_v<T>;
-template <class T> concept swappable_c = std::is_swappable_v<T>;
+template <class T> concept swappable_c = std::swappable<T>;
 template <class T> concept nothrow_swappable_c = std::is_nothrow_swappable_v<T>;
 
 }
