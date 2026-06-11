@@ -8,8 +8,10 @@ Each implementation has the same API as std::vector, with some additions listed 
     constexpr explicit (flags::ReserveInitial<N>)  // pass in a flags::reserve_initial<N> instance 
     noexcept(nothrow_allocating); 
     
-    constexpr explicit operator std::span<T>() const noexcept;
-    constexpr std::span<T> to_span() const noexcept;
+    constexpr explicit operator std::span<T>() noexcept;
+    constexpr std::span<T> to_span() noexcept;
+    constexpr explicit operator std::span<const T>() const noexcept;
+    constexpr std::span<const T> to_span() const noexcept;
 ```
 
 
@@ -32,12 +34,12 @@ Iterator invalidation rules are consistent with std::vector.
 
 Settings:
 - Expansion multiplier.
-- Whether to enable string capabilities (will always release a null terminated array).
+- CString: Whether to enable string capabilities (will always release a null terminated array). Does not perform small-string-optimization.
 
 API:
 ```cpp
 // constexpr and noexcept will be excluded for brevity.
-// methods that are identical to their std::vector counterparts will be excluded too
+// methods identical to their std::vector counterparts are also excluded.
     
 /*  Constructors / Assignment */
 
@@ -125,18 +127,18 @@ To create your own implementation, use the following format: <br>
 template<u64_t custom_setting = 4, bool Small = false, u64_t ExpansionMult = 2>
 struct custom_vector_settings {
   static constexpr auto my_setting = custom_setting;
-  static constexpr base_vector_settings<Small, ExpansionMult> base_settings{};
+  static constexpr eden::base_vector_settings<Small, ExpansionMult> base_settings{};
 };
 
-template <class T, auto settings = custom_vector_settings{}, allocator_for_c<T> Allocator = std::allocator<T>>
-class custom_vector : public base_vector<T, custom_vector<T, settings, Allocator>, settings.base_settings, Allocator> {
+template <class T, auto settings = custom_vector_settings{}, eden::allocator_for_c<T> Allocator = std::allocator<T>>
+class custom_vector : public eden::base_vector<T, custom_vector<T, settings, Allocator>, settings.base_settings, Allocator> {
   static constexpr auto my_setting = settings.my_setting;
   
-  using base = base_vector<T, swap_vector, settings.base_settings, Allocator>; // Recommended for easy use of base_vector's members.
-  friend class base_vector<T, swap_vector, settings.base_settings, Allocator>; // Required if you override any of the protected members of base_vector.
-  using base::m_begin; // Brings base class members into scope. Required if you don't want to use base:: prefix due to templating quirks.
+  using base = eden::base_vector<T, custom_vector, settings.base_settings, Allocator>; // Recommended for easy use of base_vector's members.
+  friend class eden::base_vector<T, custom_vector, settings.base_settings, Allocator>; // Required if you override any of the protected members of base_vector.
+  using base::m_begin; // Brings base class members into scope. Required if you don't want to use base:: prefix (due to templating quirks).
 public:
-}
+};
 ```
 Any overriden methods in the derived class will automatically be preferred anywhere they are used in base_vector, even when called directly on a base_vector&. <br>
 Note that if you plan to use the m_size and m_cap members directly, you must accommodate for the possibility that your vector is 'Small'.

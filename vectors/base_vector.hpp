@@ -496,12 +496,20 @@ public:
   { return m_begin; }
 
   [[nodiscard]] constexpr explicit
-  operator std::span<T>() const noexcept
+  operator std::span<T>() noexcept
+  { return std::span(m_begin, call_derived size()); }
+
+  [[nodiscard]] constexpr explicit
+  operator std::span<const T>() const noexcept
   { return std::span(m_begin, call_derived_const size()); }
 
   [[nodiscard]] constexpr std::span<T>
+  to_span() noexcept
+  { return call_derived operator std::span<T>(); }
+
+  [[nodiscard]] constexpr std::span<const T>
   to_span() const noexcept
-  { return  call_derived_const operator std::span<T>(); }
+  { return call_derived_const operator std::span<const T>(); }
 
   [[nodiscard]] constexpr bool
   empty() const noexcept {

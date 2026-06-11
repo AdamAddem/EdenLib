@@ -9,5 +9,7 @@
 #include "string_utils.hpp"
 #include "type_flags.hpp"
 #include "typedefs.hpp"
+
 #include "vectors/releasing_vector.hpp"
 #include "vectors/swap_vector.hpp"
+#include "vectors/vector.hpp"
