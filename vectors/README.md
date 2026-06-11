@@ -117,7 +117,7 @@ Example Usage:
 ```
 
 
-### How To Create A Custom Vector
+### Creating your own implementation 
 base_vector.hpp holds a basic vector implementation that is (mostly) standards compliant with the main caveat of no exception safety. <br>
 There exists a base_vector_settings class with two settings, Small and ExpansionMult (their effects are detailed in the header). <br>
 To create your own implementation, use the following format: <br>
@@ -133,14 +133,13 @@ class custom_vector : public base_vector<T, custom_vector<T, settings, Allocator
   static constexpr auto my_setting = settings.my_setting;
   
   using base = base_vector<T, swap_vector, settings.base_settings, Allocator>; // Recommended for easy use of base_vector's members.
-  friend class base_vector<T, swap_vector, settings.base_settings, Allocator>; // Wordy, but required to have base_vector call your private overrides.
+  friend class base_vector<T, swap_vector, settings.base_settings, Allocator>; // Required if you override any of the protected members of base_vector.
   using base::m_begin; // Brings base class members into scope. Required if you don't want to use base:: prefix due to templating quirks.
 public:
 }
 ```
-Any overriden methods in the derived class will automatically be preferred anywhere they are used in base_vector, 
-even when called directly on a base_vector& despite being non-virtual. <br>
+Any overriden methods in the derived class will automatically be preferred anywhere they are used in base_vector, even when called directly on a base_vector&. <br>
 Note that if you plan to use the m_size and m_cap members directly, you must accommodate for the possibility that your vector is 'Small'.
-Normally they are of type T*, but when 'Small' is true they might be of type u32_t. 
+Normally they are of type T*, but when 'Small' is true they will be of type u32_t. 
 If you don't plan on manipulating these members, prefer to use the size() and capacity() methods instead. <br>
 To prevent use of a setting in base_vector don't include it as a template paremeter in your settings class. Provide your preferred value directly to base_vector_settings. <br>

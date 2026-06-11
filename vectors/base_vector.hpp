@@ -128,22 +128,23 @@ protected:
 
     auto const sz = call_derived size();
     while (i < sz) {
-      alloc_traits::construct(m_alloc, new_buff + i, std::move_if_noexcept(*(m_begin + i)));
+      alloc_traits::construct(m_alloc, new_buff + i, std::move_if_noexcept(m_begin[i]));
       ++i;
     }
     call_derived destroy(); call_derived deallocate();
     m_begin = new_buff;
 
-    if constexpr (is_small) m_cap = count;
-    else m_size = m_begin + i, m_cap = m_begin + count;
+    if constexpr (is_small) { m_size = sz; m_cap = count; }
+    else { m_size = m_begin + i; m_cap = m_begin + count; }
   }
 
   constexpr void destroy_n_backwards(count_t n)
   noexcept(nothrow_destruct) {
     assume_assert(m_begin); assert(call_derived size() >= n);
-    while (n-- > 0)
+    while (n-- > 0) {
       if constexpr (is_small) alloc_traits::destroy(m_alloc, m_begin + --m_size);
       else alloc_traits::destroy(m_alloc, --m_size);
+    }
   }
 
   constexpr ~base_vector()
@@ -365,8 +366,6 @@ public:
     std::swap(m_cap, other.m_cap); std::swap(m_alloc, other.m_alloc);
   }
 
-
-
   template <base_vector_settings other_settings, allocator_for_c<T> other_allocator>
   requires compatible_settings<other_settings> and same_c<Allocator, other_allocator>
   constexpr Derived&
@@ -381,14 +380,14 @@ public:
 
   [[nodiscard]] constexpr T&
   at(count_t idx) {
-    if (m_begin + idx >= m_size)
+    if (idx >= call_derived size())
       throw std::out_of_range(std::format("Element access at index {} in eden::base_vector with size of {}.", idx, call_derived size()));
     return m_begin[idx];
   }
 
   [[nodiscard]] constexpr const T&
   at(count_t idx) const {
-    if (m_begin + idx >= m_size)
+    if (idx >= call_derived_const size())
       throw std::out_of_range(std::format("Element access at index {} in eden::base_vector with size of {}.", idx, call_derived_const size()));
     return m_begin[idx];
   }
@@ -405,69 +404,88 @@ public:
     return m_begin[idx];
   }
 
-  [[nodiscard]] constexpr iterator
+#define derived_iter typename Derived::iterator
+#define derived_rev_iter typename Derived::reverse_iterator
+#define derived_const_iter typename Derived::const_iterator
+#define derived_const_rev_iter typename Derived::const_reverse_iterator
+  [[nodiscard]] constexpr auto
   begin() noexcept
-  {return iterator(m_begin);}
+  { return derived_iter(m_begin); }
 
-  [[nodiscard]] constexpr const_iterator
+  [[nodiscard]] constexpr auto
   begin() const noexcept
-  {return const_iterator(m_begin);}
+  { return derived_const_iter(m_begin); }
 
-  [[nodiscard]] constexpr const_iterator
+  [[nodiscard]] constexpr auto
   cbegin() const noexcept
-  {return const_iterator(m_begin);}
+  { return derived_const_iter(m_begin); }
 
-  [[nodiscard]] constexpr reverse_iterator
+  [[nodiscard]] constexpr auto
   rbegin() noexcept
-  {return reverse_iterator(end());}
+  { return derived_rev_iter(call_derived end()); }
 
-  [[nodiscard]] constexpr const_reverse_iterator
+  [[nodiscard]] constexpr auto
   rbegin() const noexcept
-  {return const_reverse_iterator(cend());}
+  { return derived_const_rev_iter(call_derived_const cend()); }
 
-  [[nodiscard]] constexpr const_reverse_iterator
+  [[nodiscard]] constexpr auto
   crbegin() const noexcept
-  {return const_reverse_iterator(cend());}
+  { return derived_const_rev_iter(call_derived_const cend()); }
 
-  [[nodiscard]] constexpr iterator
-  end() noexcept
-  {return iterator(m_size);}
+  [[nodiscard]] constexpr auto
+  end() noexcept {
+    if constexpr (is_small) return derived_iter(m_begin + m_size);
+    else return derived_iter(m_size);
+  }
 
-  [[nodiscard]] constexpr const_iterator
-  end() const noexcept
-  {return const_iterator(m_size);}
+  [[nodiscard]] constexpr auto
+  end() const noexcept {
+    if constexpr (is_small) return derived_const_iter(m_begin + m_size);
+    else return derived_const_iter(m_size);
+  }
 
-  [[nodiscard]] constexpr const_iterator
+  [[nodiscard]] constexpr auto
   cend() const noexcept
-  {return const_iterator(m_size);}
+  { return call_derived_const end(); }
 
-  [[nodiscard]] constexpr reverse_iterator
+  [[nodiscard]] constexpr auto
   rend() noexcept
-  {return reverse_iterator(begin());}
+  { return derived_rev_iter( call_derived begin()); }
 
-  [[nodiscard]] constexpr const_reverse_iterator
+  [[nodiscard]] constexpr auto
   rend() const noexcept
-  {return const_reverse_iterator(cbegin());}
+  { return derived_const_rev_iter( call_derived_const cbegin()); }
 
-  [[nodiscard]] constexpr const_reverse_iterator
+  [[nodiscard]] constexpr auto
   crend() const noexcept
-  {return const_reverse_iterator(cbegin());}
+  { return derived_const_rev_iter(call_derived_const cbegin()); }
+
+#undef derived_iter
+#undef derived_rev_iter
+#undef derived_const_iter
+#undef derived_const_rev_iter
 
   [[nodiscard]] constexpr T&
   front() noexcept
-  {assume_assert(m_begin); return *m_begin;}
+  { assume_assert(m_begin); return *m_begin; }
 
   [[nodiscard]] constexpr const T&
   front() const noexcept
   {assume_assert(m_begin); return *m_begin;}
 
   [[nodiscard]] constexpr T&
-  back() noexcept
-  {assume_assert(m_size); return m_size[-1];}
+  back() noexcept {
+    assume_assert(m_size);
+    if constexpr (is_small) return m_begin[m_size - 1];
+    else return m_size[-1];
+  }
 
   [[nodiscard]] constexpr const T&
-  back() const noexcept
-  {assume_assert(m_size); return m_size[-1];}
+  back() const noexcept {
+    assume_assert(m_size);
+    if constexpr (is_small) return m_begin[m_size - 1];
+    else return m_size[-1];
+  }
 
   [[nodiscard]] constexpr T*
   data() noexcept
@@ -566,8 +584,9 @@ public:
 
     assume_assert(m_begin);
     if constexpr (is_small) {
-      alloc_traits::construct(m_alloc, m_begin + m_size, std::forward<Args>(args)...);
-      return m_begin[m_size++];
+      auto const obj_location = m_begin + m_size; ++m_size;
+      alloc_traits::construct(m_alloc, obj_location, std::forward<Args>(args)...);
+      return *obj_location;
     }
     else {
       alloc_traits::construct(m_alloc, m_size, std::forward<Args>(args)...);
