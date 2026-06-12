@@ -153,6 +153,12 @@ public:
   constexpr releasing_vector()
   noexcept(std::is_nothrow_default_constructible_v<Allocator>) = default;
 
+  template <sz_t N>
+  constexpr explicit
+  releasing_vector(flags::ReserveInitial<N>)
+  noexcept(nothrow_allocating)
+  { allocate_from_empty(N); }
+
   constexpr explicit
   releasing_vector(released_ptr released_data)
   noexcept(base::nothrow_move_construct) {

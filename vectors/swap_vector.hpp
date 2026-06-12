@@ -37,12 +37,15 @@ class swap_vector : public base_vector<T, swap_vector<T, BinaryPredicate, settin
   using base::m_begin;
 
 public:
+  using base::base;
+  using typename base::count_t;
+
   // returns nullptr if not found. pointer is unstable and may point to bad data should this vector expand or another search be called.
-  template<class KeyType>
+  template<class ...KeyTypes>
   [[nodiscard]] constexpr T*
-  search(KeyType&& key)
+  search(KeyTypes&&... key)
   noexcept(nothrow_swappable_c<T>)
-  requires (convertible_to_c<std::invoke_result_t<decltype(BinaryPredicate), T const&, KeyType>, bool>) {
+  requires (convertible_to_c<std::invoke_result_t<decltype(BinaryPredicate), T const&, KeyTypes...>, bool>) {
     static constexpr bool transposition = stability >= 1;
 
     auto const sz = this->size();
@@ -50,7 +53,7 @@ public:
     auto const back_bubble = transposition ? sz / stability + 1 : 0;
     while (n-- > 0) {
       auto curr_ptr = this->m_begin + n;
-      bool const hit = BinaryPredicate(*curr_ptr, std::forward<KeyType>(key));
+      bool const hit = BinaryPredicate(*curr_ptr, std::forward<KeyTypes>(key)...);
       if (hit) {
         auto const swap_location = transposition ? this->m_begin + std::min(back_bubble + n, sz-1) : &this->back();
         if (curr_ptr not_eq swap_location) std::swap(*curr_ptr, *swap_location);
@@ -58,6 +61,47 @@ public:
       }
     }
     return nullptr;
+  }
+
+  // returns nullptr if not found. pointer is unstable and may point to bad data should this vector expand or another search be called.
+  template<class ...KeyTypes>
+  [[nodiscard]] constexpr T*
+  search(auto&& OtherPredicate, KeyTypes&&... key)
+  noexcept(nothrow_swappable_c<T>)
+  requires (convertible_to_c<std::invoke_result_t<decltype(OtherPredicate), T const&, KeyTypes...>, bool>) {
+    static constexpr bool transposition = stability >= 1;
+
+    auto const sz = this->size();
+    auto n = sz;
+    auto const back_bubble = transposition ? sz / stability + 1 : 0;
+    while (n-- > 0) {
+      auto curr_ptr = this->m_begin + n;
+      bool const hit = OtherPredicate(*curr_ptr, std::forward<KeyTypes>(key)...);
+      if (hit) {
+        auto const swap_location = transposition ? this->m_begin + std::min(back_bubble + n, sz-1) : &this->back();
+        if (curr_ptr not_eq swap_location) std::swap(*curr_ptr, *swap_location);
+        return swap_location;
+      }
+    }
+    return nullptr;
+  }
+
+  // will swap each element into the index specified by GetIndexOf
+  // only really useful if the type holds some sort of unique id
+  constexpr void
+  sort_by_idx(auto&& GetIndexOf)
+  noexcept(nothrow_swappable_c<T>)
+  requires (convertible_to_c<std::invoke_result_t<decltype(GetIndexOf), T const&>, count_t>) {
+    count_t curr_idx{};
+    auto const sz = this->size();
+    while (curr_idx < sz) {
+      auto& curr = m_begin[curr_idx];
+      count_t const idx = GetIndexOf(curr); assume_assert(idx < sz);
+      if (idx not_eq curr_idx)
+        std::swap(curr, m_begin[idx]);
+
+      ++curr_idx;
+    }
   }
 
 };
