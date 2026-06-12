@@ -375,8 +375,7 @@ public:
 
   template <base_vector_settings other_settings, allocator_for_c<T> other_allocator>
   requires compatible_settings<other_settings> and same_c<Allocator, other_allocator>
-  constexpr base_vector(base_vector<T, Derived, other_settings, other_allocator> &&other)
-  noexcept(nothrow_move_constructible_c<Allocator>)
+  constexpr base_vector(base_vector<T, Derived, other_settings, other_allocator> &&other) noexcept
   : m_alloc(std::move(other.m_alloc)), m_begin(other.m_begin), m_size(other.m_size), m_cap(other.m_cap)
   { static_cast<Derived&>(other).zero_members(); }
 
@@ -395,8 +394,7 @@ public:
   template <base_vector_settings other_settings, allocator_for_c<T> other_allocator>
   requires compatible_settings<other_settings> and same_c<Allocator, other_allocator>
   constexpr Derived&
-  operator=(base_vector<T, Derived, other_settings, other_allocator> &&other)
-  noexcept(nothrow_move_constructible_c<Allocator>) {
+  operator=(base_vector<T, Derived, other_settings, other_allocator> &&other) noexcept {
     call_derived destroy(); call_derived deallocate();
     m_alloc = std::move(other.m_alloc);
     m_begin = other.m_begin; m_size = other.m_size; m_cap = other.m_cap;

@@ -38,7 +38,7 @@ Settings:
 
 API:
 ```cpp
-// constexpr and noexcept will be excluded for brevity.
+// constexpr, noexcept, and nodiscard are excluded for brevity.
 // methods identical to their std::vector counterparts are also excluded.
     
 /*  Constructors / Assignment */
@@ -95,27 +95,45 @@ Elements are searched using a user provided predicate. When found, they are move
 
 Settings:
 - Stability: The rate at which elements are moved towards the back (lower is faster). A setting of 1 will immediately swap elements with the backmost position.
+- PreserveBackmost: Will prevent any found elements from swapping into the backmost position. Useful if you need to preserve the most recent addition.
 - Small.
 - Expansion multiplier.
 
 API:
 ```cpp
-  // returns nullptr if not found. pointer is unstable and may point to bad data should this vector expand or another search be called.
-  template<class KeyType>
-  [[nodiscard]] constexpr T*
-  search(KeyType&& key)
-  noexcept(nothrow_swappable)
-  requires (convertible_to_c<std::invoke_result_t<decltype(BinaryPredicate), T const&, KeyType>, bool>); // predicate must accept T & key, and return something convertible to bool
+  // constexpr, noexcept, and nodiscard are excluded for brevity.
+  // All following methods return nullptr if not found. Pointer is unstable and may point to bad data should the vector expand or another search be called.
+  
+  template<class ...KeyTypes>
+  T* search(auto&& Predicate, KeyTypes&&... key)
+  requires(/* predicate accepts (T const&, KeyType...) and returns something convertible to bool */);
+  
+  // variation that won't swap elements, useful if you need temporary stability or know the element searched is rare
+  // this can also be used so assertions don't affect the state of the program
+  template<class ...KeyTypes>
+  T* search_noswap(auto&& Predicate, KeyTypes&&... key) const
+  requires(/* predicate accepts (T const&, KeyType...) and returns something convertible to bool */);
+  
+  // will always swap an element with the backmost, does not respect PreserveBackmost
+  template<class ...KeyTypes>
+  T* search_swapback(auto&& Predicate, KeyTypes&&... keys)
+  requires(/* predicate accepts (T const&, KeyType...) and returns something convertible to bool */);
+  
+  // will swap each element into the index specified by GetIdxOf 
+  // only really useful if the object itself keeps track of its original insertion order
+  // does not respect PreserveBackmost
+  constexpr void sort_by_unique_idx(auto&& GetIdxOf)
+  requires (/* predicate accepts (T const&) and returns an index */);
   
  ```
 
 Example Usage:
 ```cpp
   struct Foo { int x; };
-  using my_swap_vec = swap_vector<Foo, [] (Foo const& element, int key) { return element.x == key; }>;
-  my_swap_vec vec;
+  using pred = [] (Foo const& element, int key) { return element.x == key; };
+  swap_vector<Foo> vec;
   ...
-  auto* res = vec.search(5);
+  auto* res = vec.search(pred, 5);
 ```
 
 
