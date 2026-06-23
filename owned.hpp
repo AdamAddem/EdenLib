@@ -1,6 +1,7 @@
 #pragma once
 #include "typedefs.hpp"
 #include "string_utils.hpp"
+#include "metaprogramming/concepts.hpp"
 
 #include <cstring>
 #include <span>
@@ -535,8 +536,16 @@ public:
   {T* retval = internal; internal = nullptr; return retval;}
 
   constexpr void
-  reset(T* mine_now = nullptr) noexcept
-  {internal = mine_now;}
+  reset(T* mine_now, sz_t new_length) noexcept
+  requires dynamicly_sized {
+    length.m = new_length;
+    internal = mine_now;
+  }
+
+  constexpr void
+  reset(T* mine_now) noexcept
+  requires (not dynamicly_sized)
+  { internal = mine_now; }
 
   [[nodiscard]] constexpr sz_t
   size() const noexcept {
