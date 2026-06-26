@@ -4,6 +4,7 @@
 
 #define assume_assert(always_true) if(true) {[[assume((always_true))]]; assert((always_true));} else (void)0
 #define eden_unreachable(message) if(true) {assert(false and message); std::unreachable();} else (void)0
+#define eden_throws(...) noexcept(false and (#__VA_ARGS__))
 
 #ifdef __clang__
 #define eden_restrict __restrict
