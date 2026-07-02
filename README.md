@@ -88,8 +88,8 @@ Also features an implementation of type_list and a 'nontype_list'. <br>
     struct Example : type<Example> {};     
     using example_array = Example::as_array;    // Example[]
     
-    // registered_type concept can be used to filter for parameters inheriting from type
-    auto to_array(registered_type auto obj) 
+    // registered_type_c concept can be used to filter for parameters inheriting from type
+    auto to_array(registered_type_c auto obj) 
     {...}
     
     struct Override : type<Override> {
@@ -104,10 +104,10 @@ Also features an implementation of type_list and a 'nontype_list'. <br>
 /* Traits can be prepended with '_' to create a function which avoids the 'template' keyword and accepts instances */
     template<class T> concept high_cortisol   = type<T>::template is<Example>;
     template<class T> concept medium_cortisol = type<T>::_is(type_i<Example>);
-    template<type T> concept low_cortisol     = T._is(Example{});
+    template<type T>  concept low_cortisol    = T._is(Example{});
     
 /* Types may be instantiated as variables */
-    consteval bool arbitrary_condition(registered_type auto var) {    
+    consteval bool arbitrary_condition(registered_type_c auto var) {    
         // _i suffix may be applied to transforms to get a transformed type variable
         return var.is_void              || 
                var.no_ptr_i().is_void   || 
@@ -129,7 +129,7 @@ Also features an implementation of type_list and a 'nontype_list'. <br>
  
 /* Types can be given string representations */
     struct BootlegReflection : type<BootlegReflection, "This Language Sucks!"> {};
-    std::cout << BootlegReflection::name; // This Language Sucks!
+    std::print("{}", BootlegReflection::name); // This Language Sucks!
     
     // append_number_to_literal helper provided
     template <sz_t N>

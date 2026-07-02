@@ -10,44 +10,6 @@
 
 namespace eden {
 
-//Forward Tuple implementation was shamelessly stolen from someone on stackoverflow
-//Thank you!
-namespace detail {
-    template <std::size_t Index, typename T>
-    class TupleElement {
-        T value;
-    protected:
-        TupleElement(const T& val) : value(val) {}
-
-        template <std::size_t I>
-        constexpr std::enable_if_t<I == Index, T&>
-        get() { return value; }
-
-        template <std::size_t I>
-        constexpr std::enable_if_t<I == Index, const T&>
-        get() const { return value; }
-    };
-
-    template <typename Ind, typename... Ts>
-    class TupleImpl;
-
-    template <std::size_t... Is, typename... Ts>
-    class TupleImpl<std::index_sequence<Is...>, Ts...> : TupleElement<Is, Ts>... {
-    public:
-        constexpr TupleImpl(const Ts&... args)
-        : TupleElement<Is, Ts>(args)... {}
-        using TupleElement<Is, Ts>::get...;
-    };
-}
-
-template <typename... Ts>
-struct ForwardTuple : detail::TupleImpl<std::index_sequence_for<Ts...>, Ts...> {
-    using detail::TupleImpl<std::index_sequence_for<Ts...>, Ts...>::TupleImpl;
-};
-
-template <typename... Ts>
-ForwardTuple(const Ts&...) -> ForwardTuple<Ts...>;
-
 
 template<class First, class... Rest> struct type_list;
 template<auto First, auto... Rest> struct nontype_list;
@@ -276,7 +238,7 @@ public:
   /* Type Transformations */
 
   /* Utilities */
-  static constexpr const char* name = name_str.data.data();
+  static constexpr std::string_view name = name_str.data.data();
   /* Utilities */
 };
 
@@ -498,6 +460,46 @@ nontype_list<Last>::as_typelist() noexcept { return type_list<decltype(Last)>{};
 /* i totally forgot what this was */
 template <class T>
 extern T extern_never_defined;
+
+
+// Forward Tuple implementation was shamelessly stolen from someone on stackoverflow
+// Thank you!
+namespace detail {
+template <std::size_t Index, typename T>
+class TupleElement {
+  T value;
+protected:
+  TupleElement(const T& val) : value(val) {}
+
+  template <std::size_t I>
+  constexpr std::enable_if_t<I == Index, T&>
+  get() { return value; }
+
+  template <std::size_t I>
+  constexpr std::enable_if_t<I == Index, const T&>
+  get() const { return value; }
+};
+
+template <typename Ind, typename... Ts>
+class TupleImpl;
+
+template <std::size_t... Is, typename... Ts>
+class TupleImpl<std::index_sequence<Is...>, Ts...> : TupleElement<Is, Ts>... {
+  public:
+  constexpr TupleImpl(const Ts&... args)
+  : TupleElement<Is, Ts>(args)... {}
+  using TupleElement<Is, Ts>::get...;
+};
+}
+
+template <typename... Ts>
+struct ForwardTuple : detail::TupleImpl<std::index_sequence_for<Ts...>, Ts...> {
+  using detail::TupleImpl<std::index_sequence_for<Ts...>, Ts...>::TupleImpl;
+};
+
+template <typename... Ts>
+ForwardTuple(const Ts&...) -> ForwardTuple<Ts...>;
+
 
 template <typename T>
 union UnionWithCharArray {
