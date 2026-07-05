@@ -8,6 +8,7 @@
 
 #ifdef __clang__
 #define eden_restrict __restrict
+#define eden_always_inline [[gnu::always_inline]]
 #define eden_nonull_args [[gnu::nonnull]]
 #define eden_nonnull_args(...) [[gnu::nonnull(__VA_ARGS__)]]
 #define eden_notnullptr _Nonnull
@@ -15,18 +16,23 @@
 
 #elifdef __GNUG__
 #define eden_restrict __restrict
+#define eden_always_inline [[gnu::always_inline]]
 #define eden_nonull_args [[gnu::nonnull]]
 #define eden_nonnull_args(...) [[gnu::nonnull(__VA_ARGS__)]]
 #define eden_notnullptr
 #define eden_return_nonnull [[gnu::returns_nonnull]]
+
 #elif _MSC_VER
 #define eden_restrict __restrict
+#define eden_always_inline [[msvc::forceinline]]
 #define eden_nonull_args
 #define eden_nonnull_args(...)
 #define eden_notnullptr
 #define eden_return_nonnull
+
 #else
 #define eden_restrict
+#define eden_always_inline
 #define eden_nonull_args
 #define eden_nonnull_args(...)
 #define eden_notnullptr
