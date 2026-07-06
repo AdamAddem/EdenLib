@@ -8,7 +8,7 @@ namespace eden {
 template<bool Small = false, u64_t ExpansionMult = 2>
 struct vector_settings { static constexpr base_vector_settings<Small, ExpansionMult> base_settings{}; };
 
-// Standard vector implementation
+// Mostly standard vector implementation
 template <class T, auto settings = vector_settings{}, allocator_for_c<T> Allocator = std::allocator<T>>
 class vector : public base_vector<T, vector<T, settings, Allocator>, settings.base_settings, Allocator> {};
 

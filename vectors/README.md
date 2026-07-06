@@ -1,6 +1,6 @@
 ### Note:
 The vector implementations within this library do not have any exception safety guarantees. <br>
-As such, each method is marked noexcept conditional on the exception behavior of the value_type / allocator in that scenario. <br>
+As such, most methods are marked noexcept conditional on the exception behavior of the value_type and or allocator in that scenario. <br>
 Expansion still relies on std::move_if_noexcept. <br>
 Each implementation has the same API as std::vector, with some additions listed below: 
 ```cpp
@@ -14,16 +14,15 @@ Each implementation has the same API as std::vector, with some additions listed 
     constexpr std::span<const T> to_span() const noexcept;
 ```
 
-
 ### Vector 'Settings'
 The vector implementations within this library each have custom settings, allowing you to specify some generic properties (expansion multiplier), 
 and some implementation properties (stability in swap_vector). <br>
 To use customize each vector, pass the settings object into the respective vector's template argument as a non-type parameter. <br>
-I'd recommend that you create a type alias as writing the entire typename is tedious. <br>
+I'd recommend that you create a type alias if using custom settings, as writing the entire typename is tedious. <br>
 ```using my_customization = releasing_vector<char, releasing_vector_settings<true, 3>{}>; ```
 The common settings between most vectors is 'Small' and 'ExpansionMult':
 - Small will have the vector use a T* and two u32s for size and capacity, shrinking the vector's size to 16 bytes.
-- ExpansionMult will specifies the expansion rate of the vector after reaching capacity.
+- ExpansionMult specifies the expansion rate of the vector after reaching capacity.
 
 ### releasing_vector.hpp
 An implementation of a vector able to 'release' ownership over its internal buffer. <br>

@@ -1,7 +1,7 @@
 #pragma once
-#include "typedefs.hpp"
-#include "string_utils.hpp"
 #include "metaprogramming/concepts.hpp"
+#include "string_utils.hpp"
+#include "typedefs.hpp"
 
 #include <cstring>
 #include <span>
@@ -9,50 +9,6 @@
 #include <utility>
 
 namespace eden {
-/* Owned Pointer:
- *  -Intended to be a wrapper for a raw pointer, with similar semantics to unique_ptr
- *  -Differs from unique_ptr in that it does NOT delete the pointed element on destruction.
- *     -Note: reset also does NOT delete the element.
- *
- *  -This is possibly useful in some edge cases:
- *     -unique_ptr requires the type be complete, so simple methods that could be inlined and done at compile time.
- *      have to be defined in a cpp file rather than the header. owned_ptr does not prevent this.
- *
- *  -Most methods are constexpr and noexcept.
- *  -Array types have some differences and additions listed in the API section.
- *  -c_str is offered as a char[] specialization and offers some extra changes for c-strings.
- *
- * Methods:
- *  -owned_ptr(); //constructs w/ nullptr
- *  -explicit owned_ptr(T*); //takes ownership over pointer
- *
- *  -copy assignment and construction deleted
- *  -move assignment and construction defined
- *
- *  -T* get() const; //returns internal pointer
- *  -T* release(); //releases ownership of internal pointer
- *  -void reset(T*); //releases ownership of previous pointer, takes ownership of parameter
- *    -Important: does not delete previous pointer. Call release or get prior if you need to ensure it is destroyed.
- *
- *  -operator*, ->; //does what you think
- *  -operator==(nullptr_t); //returns true if the internal pointer is null
- *  -operator==(const owned_ptr&), operator==(T*); //returns pointer equality
- *  -operator bool; //returns true if the internal pointer is not null
- *
- * T[] Additions / Modifications:
- *  -If the array type has a bound:
- *    -operator std::span() const; //returns static span of array size
- *    -operator==(const owned_ptr&) const;  //if T is equality comparable, returns true if all elements are equal. otherwise, just compares pointers.
- *  -std::span<T> to_dynamic_span(sz_t length) const; //returns dynamic span with specified length
- *
- * c_str Additions / Modifications:
- *  -operator==(const char*) const; //returns whether std::strcmp determines equal
- *  -operator std::string_view() const; //if bounded_c_str, O(1). Otherwise, O(N)
- *  -operator std::string() const; //if bounded_c_str, O(1). Otherwise, O(N)
- *  -length() const; //returns array bound - 1 if bounded, otherwise strlen()
- */
-
-
 
 template <class T>
 class owned_ptr {
@@ -63,62 +19,39 @@ class owned_ptr {
   static constexpr bool is_array = std::is_array_v<T>;
   static constexpr bool bounded_array = std::is_bounded_array_v<T>;
   static constexpr sz_t array_size = std::extent_v<T, std::rank_v<T> - 1>;
-  static constexpr bool elements_comparable = is_array and requires (value_type a, value_type b) {a == b;};
+  static constexpr bool elements_comparable = is_array and requires (value_type a, value_type b) { a == b; };
   static constexpr bool is_string = std::is_same_v<value_type, char> and is_array;
 
   ptr internal{nullptr};
 
 public:
-  constexpr owned_ptr() noexcept = default;
-  constexpr explicit owned_ptr(decltype(nullptr)) noexcept {}
+  constexpr            owned_ptr()                  noexcept = default;
+  constexpr explicit   owned_ptr(std::nullptr_t)    noexcept {}
+  constexpr explicit   owned_ptr(ptr&& mine_now)    noexcept : internal(mine_now) {}
+                       owned_ptr(owned_ptr const&)           = delete;
+            owned_ptr& operator=(owned_ptr const&)           = delete;
 
-  constexpr explicit owned_ptr(ptr mine_now) noexcept
-  : internal(mine_now) {}
+  constexpr            owned_ptr(owned_ptr&& other) noexcept : internal(other.internal) { other.internal = nullptr; }
+  constexpr owned_ptr& operator=(owned_ptr&& other) noexcept { internal = other.internal; other.internal = nullptr; return *this; }
 
-  owned_ptr(const owned_ptr&) = delete;
-  owned_ptr& operator=(const owned_ptr&) = delete;
+  eden_always_inline [[nodiscard]] constexpr ptr       get()                            noexcept                    { return internal; }
+  eden_always_inline [[nodiscard]] constexpr const_ptr get()                      const noexcept                    { return internal; }
+  eden_always_inline [[nodiscard]] constexpr ptr       release()                        noexcept                    { ptr const res = internal; internal = nullptr; return res; }
+  eden_always_inline               constexpr void      reset(ptr mine_now)              noexcept                    { internal = mine_now; }
 
-  constexpr owned_ptr(owned_ptr&& other) noexcept
-  : internal(other.internal) {other.internal = nullptr;}
+  eden_always_inline [[nodiscard]] constexpr ref       operator*()                      noexcept                    { return *internal; }
+  eden_always_inline [[nodiscard]] constexpr const_ref operator*()                const noexcept                    { return *internal; }
+  eden_always_inline [[nodiscard]] constexpr ptr       operator->()                     noexcept                    { return internal; }
+  eden_always_inline [[nodiscard]] constexpr const_ptr operator->()               const noexcept                    { return internal; }
+  eden_always_inline [[nodiscard]] constexpr bool      operator==(std::nullptr_t) const noexcept                    { return internal == nullptr; }
+  eden_always_inline [[nodiscard]] constexpr ref       operator[](sz_t idx)             noexcept requires is_array  { return internal[idx]; }
+  eden_always_inline [[nodiscard]] constexpr const_ref operator[](sz_t idx)       const noexcept requires is_array  { return internal[idx]; }
+  eden_always_inline [[nodiscard]] constexpr operator std::string_view()          const noexcept requires is_string { if constexpr (bounded_array) return std::string_view(internal, array_size); else return std::string_view(internal); }
+  eden_always_inline               constexpr explicit  operator bool()            const noexcept                    { return internal not_eq nullptr; }
 
-  constexpr owned_ptr& operator=(owned_ptr&& other) noexcept
-  {internal = other.internal; other.internal = nullptr; return *this;}
 
-  [[nodiscard]] constexpr ptr
-  get() noexcept
-  {return internal;}
-
-  [[nodiscard]] constexpr const_ptr
-  get() const noexcept
-  {return internal;}
-
-  [[nodiscard]] constexpr ptr
-  release() noexcept
-  {ptr retval = internal; internal = nullptr; return retval;}
-
-  constexpr void
-  reset(ptr mine_now) noexcept
-  {internal = mine_now;}
-
-  [[nodiscard]] constexpr ref
-  operator*() noexcept
-  {return *internal;}
-
-  [[nodiscard]] constexpr const_ref
-  operator*() const noexcept
-  {return *internal;}
-
-  [[nodiscard]] constexpr ptr
-  operator->() noexcept
-  {return internal;}
-
-  [[nodiscard]] constexpr const_ptr
-  operator->() const noexcept
-  {return internal;}
-
-  [[nodiscard]] constexpr bool
-  operator==(const decltype(nullptr)) const noexcept
-  {return internal == nullptr;}
+  eden_always_inline [[nodiscard]] constexpr explicit operator std::span<value_type, array_size>()      noexcept requires bounded_array { return std::span<value_type, array_size>(internal); }
+  eden_always_inline [[nodiscard]] constexpr std::span<value_type> to_dynamic_span(sz_t length)   const noexcept requires is_array { return std::span(internal, length); }
 
   [[nodiscard]] constexpr bool
   operator==(const owned_ptr& other) const noexcept {
@@ -146,39 +79,6 @@ public:
       return internal == other;
   }
 
-  [[nodiscard]] constexpr ref
-  operator[](sz_t idx) noexcept
-  requires is_array
-  {return internal[idx];}
-
-  [[nodiscard]] constexpr const_ref
-  operator[](sz_t idx) const noexcept
-  requires is_array
-  {return internal[idx];}
-
-  constexpr explicit
-  operator bool() const noexcept
-  {return internal not_eq nullptr;}
-
-  [[nodiscard]] constexpr explicit
-  operator std::span<value_type, array_size>() noexcept
-  requires bounded_array
-  {return std::span<value_type, array_size>(internal);}
-
-  [[nodiscard]] constexpr std::span<value_type>
-  to_dynamic_span(sz_t length) const noexcept
-  requires is_array
-  {return std::span(internal, length);}
-
-  [[nodiscard]] constexpr
-  operator std::string_view() const noexcept
-  requires is_string {
-    if constexpr (bounded_array)
-      return std::string_view(internal, array_size);
-    else
-      return std::string_view(internal);
-  }
-
   [[nodiscard]] constexpr explicit
   operator std::string() const noexcept
   requires is_string {
@@ -204,14 +104,9 @@ template <sz_t N>
 using owned_bounded_cstr = owned_ptr<char[N]>;
 using owned_cstr = owned_ptr<char[]>;
 
-template <class T, bool condition>
-struct ContainsIf {};
-
-template <class T>
-struct ContainsIf<T, false> {};
-
-template <class T>
-struct ContainsIf<T, true> {T m;};
+template <class, bool> struct ContainsIf {};
+template <class T>     struct ContainsIf<T, false> {};
+template <class T>     struct ContainsIf<T, true> {T m;};
 
 template <class T, sz_t Extent = std::dynamic_extent>
 requires (Extent > 0)
@@ -385,57 +280,31 @@ public:
   using const_reverse_iterator = std::reverse_iterator<const_iterator>;
   using reverse_iterator = std::reverse_iterator<iterator>;
 
-  [[nodiscard]] constexpr iterator
-  begin() noexcept
-  {return iterator(internal);}
+  [[nodiscard]] constexpr iterator begin() noexcept {return iterator(internal);}
 
-  [[nodiscard]] constexpr const_iterator
-  begin() const noexcept
-  {return const_iterator(internal);}
+  [[nodiscard]] constexpr const_iterator begin() const noexcept {return const_iterator(internal);}
 
-  [[nodiscard]] constexpr const_iterator
-  cbegin() const noexcept
-  {return const_iterator(internal);}
+  [[nodiscard]] constexpr const_iterator cbegin() const noexcept {return const_iterator(internal);}
 
-  [[nodiscard]] constexpr reverse_iterator
-  rbegin() noexcept
-  {return reverse_iterator(end());}
+  [[nodiscard]] constexpr reverse_iterator rbegin() noexcept {return reverse_iterator(end());}
 
-  [[nodiscard]] constexpr const_reverse_iterator
-  rbegin() const noexcept
-  {return const_reverse_iterator(cend());}
+  [[nodiscard]] constexpr const_reverse_iterator rbegin() const noexcept {return const_reverse_iterator(cend());}
 
-  [[nodiscard]] constexpr const_reverse_iterator
-  crbegin() const noexcept
-  {return const_reverse_iterator(cend());}
+  [[nodiscard]] constexpr const_reverse_iterator crbegin() const noexcept {return const_reverse_iterator(cend());}
 
-  [[nodiscard]] constexpr iterator
-  end() noexcept
-  {return iterator(internal + size());}
+  [[nodiscard]] constexpr iterator end() noexcept {return iterator(internal + size());}
 
-  [[nodiscard]] constexpr const_iterator
-  end() const noexcept
-  {return const_iterator(internal + size());}
+  [[nodiscard]] constexpr const_iterator end() const noexcept {return const_iterator(internal + size());}
 
-  [[nodiscard]] constexpr const_iterator
-  cend() const noexcept
-  {return const_iterator(internal + size());}
+  [[nodiscard]] constexpr const_iterator cend() const noexcept {return const_iterator(internal + size());}
 
-  [[nodiscard]] constexpr reverse_iterator
-  rend() noexcept
-  {return reverse_iterator(begin());}
+  [[nodiscard]] constexpr reverse_iterator rend() noexcept {return reverse_iterator(begin());}
 
-  [[nodiscard]] constexpr const_reverse_iterator
-  rend() const noexcept
-  {return const_reverse_iterator(cbegin());}
+  [[nodiscard]] constexpr const_reverse_iterator rend() const noexcept {return const_reverse_iterator(cbegin());}
 
-  [[nodiscard]] constexpr const_reverse_iterator
-  crend() const noexcept
-  {return const_reverse_iterator(cbegin());}
+  [[nodiscard]] constexpr const_reverse_iterator crend() const noexcept {return const_reverse_iterator(cbegin());}
 
-  constexpr owned_span() noexcept
-  requires dynamicly_sized
-  : internal(nullptr) {}
+  constexpr owned_span() noexcept requires dynamicly_sized : internal(nullptr) {}
 
   constexpr explicit
   owned_span(T* mine_now, sz_t count) noexcept
@@ -460,10 +329,10 @@ public:
   owned_span(owned_cstr str) noexcept
   requires (dynamicly_sized and is_string)
   : internal(str.release())
-  {length.m = std::char_traits<char>::length(internal);}
+  { length.m = std::char_traits<char>::length(internal); }
 
-  owned_span(const owned_span&) = delete;
-  owned_span& operator=(const owned_span&) = delete;
+  owned_span(owned_span const&) = delete;
+  owned_span& operator=(owned_span const&) = delete;
 
   template <sz_t OtherExtent>
   constexpr owned_span(owned_span<T, OtherExtent>&& other) noexcept
@@ -479,7 +348,7 @@ public:
   constexpr owned_span(owned_span&& other) noexcept
   requires (not dynamicly_sized)
   : internal(other.internal)
-  {other.internal = nullptr;}
+  { other.internal = nullptr; }
 
   template <sz_t OtherExtent>
   constexpr owned_span&
@@ -513,54 +382,23 @@ public:
     return *this;
   }
 
-  [[nodiscard]] constexpr T&
-  front() noexcept {return *internal;}
+  eden_always_inline [[nodiscard]] constexpr T&       front()                                   noexcept { return *internal; }
+  eden_always_inline [[nodiscard]] constexpr T const& front()                             const noexcept { return *internal; }
+  eden_always_inline [[nodiscard]] constexpr T&       back()                                    noexcept { return *(internal + (size() - 1)); }
+  eden_always_inline [[nodiscard]] constexpr T const& back()                              const noexcept { return *(internal + (size() - 1)); }
+  eden_always_inline [[nodiscard]] constexpr T*       get()                                     noexcept { return internal; }
+  eden_always_inline [[nodiscard]] constexpr T const* get()                               const noexcept { return internal; }
+  eden_always_inline [[nodiscard]] constexpr T*       release()                                 noexcept { T* retval = internal; internal = nullptr; return retval; }
+  eden_always_inline [[nodiscard]] constexpr sz_t     size()                              const noexcept { if constexpr(dynamicly_sized) return length.m; else return Extent; }
+  eden_always_inline [[nodiscard]] constexpr bool     empty()                             const noexcept { return size() == 0; }
+  eden_always_inline               constexpr void     reset(T* mine_now, sz_t new_length)       noexcept requires dynamicly_sized { length.m = new_length; internal = mine_now; }
+  eden_always_inline               constexpr void     reset(T* mine_now)                        noexcept requires (not dynamicly_sized) { internal = mine_now; }
+  eden_always_inline [[nodiscard]] constexpr bool     operator==(std::nullptr_t)          const noexcept { return internal == nullptr; }
+  eden_always_inline [[nodiscard]] constexpr T&       operator[](sz_t idx)                      noexcept { return internal[idx]; }
+  eden_always_inline [[nodiscard]] constexpr T const& operator[](sz_t idx)                const noexcept { return internal[idx]; }
+  eden_always_inline [[nodiscard]] constexpr explicit operator bool()                     const noexcept { return internal not_eq nullptr; }
+  eden_always_inline [[nodiscard]] constexpr operator std::string_view()                  const noexcept requires is_string { return std::string_view(internal, size()); }
 
-  [[nodiscard]] constexpr const T&
-  front() const noexcept {return *internal;}
-
-  [[nodiscard]] constexpr T&
-  back() noexcept {return *(internal + (size() - 1));}
-
-  [[nodiscard]] constexpr const T&
-  back() const noexcept {return *(internal + (size() - 1));}
-
-  [[nodiscard]] constexpr T*
-  get() noexcept {return internal;}
-
-  [[nodiscard]] constexpr const T*
-  get() const noexcept {return internal;}
-
-  [[nodiscard]] constexpr T*
-  release() noexcept
-  {T* retval = internal; internal = nullptr; return retval;}
-
-  constexpr void
-  reset(T* mine_now, sz_t new_length) noexcept
-  requires dynamicly_sized {
-    length.m = new_length;
-    internal = mine_now;
-  }
-
-  constexpr void
-  reset(T* mine_now) noexcept
-  requires (not dynamicly_sized)
-  { internal = mine_now; }
-
-  [[nodiscard]] constexpr sz_t
-  size() const noexcept {
-    if constexpr(dynamicly_sized)
-      return length.m;
-    else return Extent;
-  }
-
-  [[nodiscard]] constexpr bool
-  empty() const noexcept
-  {return size() == 0;}
-
-  [[nodiscard]] constexpr bool
-  operator==(const decltype(nullptr)) const noexcept
-  {return internal == nullptr;}
 
   template <sz_t OtherExtent>
   [[nodiscard]] constexpr bool
@@ -586,27 +424,7 @@ public:
     return streq(internal, c_str, N);
   }
 
-  [[nodiscard]] constexpr bool
-  operator==(const char* c_str) const noexcept
-  requires is_string
-  {return streq(internal, c_str);}
-
-  [[nodiscard]] constexpr T&
-  operator[](sz_t idx) noexcept
-  {return internal[idx];}
-
-  [[nodiscard]] constexpr const T&
-  operator[](sz_t idx) const noexcept
-  {return internal[idx];}
-
-  [[nodiscard]] constexpr explicit
-  operator bool() const noexcept
-  {return internal not_eq nullptr;}
-
-  [[nodiscard]] constexpr
-  operator std::string_view() const noexcept
-  requires is_string
-  {return std::string_view(internal, size());}
+  eden_always_inline [[nodiscard]] constexpr bool operator==(const char* c_str) const noexcept requires is_string { return streq(internal, c_str); }
 
 };
 

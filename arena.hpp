@@ -1,85 +1,78 @@
 #pragma once
-#include "metaprogramming/concepts.hpp"
-#include "metaprogramming/type_class.hpp"
 #include "typedefs.hpp"
 
 #include <memory>
 #include <new>
+#include <vector>
 
 namespace eden {
 
-template <sz_t N = 4096uz>
+template <sz_t NBytes = 4096uz, sz_t Align = 64>
 class Arena {
-  void* curr;
+  void* end;
   sz_t remaining;
-  Arena* next_arena{nullptr};
+
+  static constexpr auto alloc_alignment = std::align_val_t{Align};
 public:
-  Arena() : remaining(N) {
-    curr = ::operator new(N, std::align_val_t{8});
-  }
 
-  Arena(Arena&& other) noexcept
-  : curr(other.curr), remaining(other.remaining), next_arena(other.next_arena) {
-    other.curr = nullptr; other.next_arena = nullptr;
-  }
+  Arena() : remaining(NBytes) { end = ::operator new(NBytes, alloc_alignment); }
+  Arena(Arena&& other) noexcept : end(other.end), remaining(other.remaining) { other.end = nullptr; other.remaining = 0; }
 
+  // returns nullptr on failure
   template <class T>
+  requires (sizeof(T) <= NBytes)
   [[nodiscard]] constexpr T*
   allocate(sz_t n = 1) noexcept {
-    if (next_arena)
-      return next_arena->allocate<T>(n);
+    static constexpr sz_t Tsz = sizeof(T);
+    static constexpr sz_t Talign = alignof(T);
 
-    void* const new_alloc = std::align(alignof(T), sizeof(T) * n, curr,remaining);
+    auto const alloc_bytes = Tsz * n;
+    void* const new_alloc = std::align(Talign, alloc_bytes, end, remaining);
     if (new_alloc) {
-      curr = static_cast<char*>(curr) + sizeof(T) * n;
-      remaining -= sizeof(T) * n;
-      return static_cast<T*>(new_alloc);
+      end = (char*)end + alloc_bytes;
+      remaining -= alloc_bytes;
+      return (T*) new_alloc;
     }
 
-    next_arena = new Arena();
-    return next_arena->allocate<T>(n);
+    remaining = 0;
+    return nullptr;
   }
 
   constexpr void
   pop(sz_t bytes) noexcept {
-    curr = static_cast<char*>(curr) - bytes;
+    end = (char*)end - bytes;
     remaining += bytes;
   }
 
   ~Arena() {
-    if (curr == nullptr)
-      return;
-    ::operator delete(static_cast<char*>(curr) - (N - remaining), std::align_val_t{8});
-    delete next_arena;
+    if (end == nullptr) return;
+    ::operator delete( (char*)end - (NBytes - remaining), alloc_alignment );
   }
 
 };
 
-template <class T, sz_t N = 4096uz>
-class ArenaAllocator {
-  Arena<N>* arena;
+template <sz_t NBytes = 4096uz, sz_t Align = 64>
+class ArenaPool {
+  std::vector<Arena<NBytes, Align>> arenas;
 public:
-  using value_type = T;
 
-  struct propagate_on_container_copy_assignment : std::true_type {};
-  struct propagate_on_container_move_assignment : std::true_type {};
-  struct propogate_on_container_swap : std::true_type{};
+  ArenaPool() noexcept : arenas(1) {}
 
+  template <class T>
+  requires (sizeof(T) <= NBytes / 2) // why would you use an arena if you can only allocate one element?
   [[nodiscard]] T*
-  allocate(sz_t n) noexcept
-  {return arena->template allocate<T>(n);}
+  allocate(sz_t count) noexcept {
+    auto const res = arenas.back().template allocate<T>(count);
+    if (res) return res;
+    arenas.emplace_back();
+    return arenas.back().template allocate<T>(count);
+  }
 
-  constexpr void
-  deallocate([[maybe_unused]] T* p,[[maybe_unused]] sz_t n) noexcept
-  {}
+  ArenaPool(ArenaPool const&) = delete;
+  ArenaPool& operator=(ArenaPool const&) = delete;
 
-  [[nodiscard]] friend constexpr bool
-  operator==(const ArenaAllocator&, const ArenaAllocator&) = default;
-
-  [[nodiscard]] constexpr ArenaAllocator&
-  operator=(const ArenaAllocator& other) noexcept = default;
+  ArenaPool(ArenaPool&&) = delete;
+  ArenaPool& operator=(ArenaPool&&) = delete;
 };
-
-static_assert(allocator_for_c<ArenaAllocator<int>, int>);
 
 }

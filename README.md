@@ -11,7 +11,7 @@ when you'd want to use them, and how to leverage base_vector.hpp to easily creat
 
 ---
 Here is a quick summary of the smaller headers:
-- arena.hpp: arena allocator with a link to another arena if capacity fills.
+- arena.hpp: arena + arenapool that stores a growing list of arenas
 - macros.hpp: has macros that generalize some compiler specific features (__restrict, nonnull, etc). If they aren't supported, then the macro is empty.
 - null_conditional_chaining.hpp: macro and template based implementation of a null conditional operator.
   - ```cpp

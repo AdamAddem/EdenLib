@@ -1,6 +1,8 @@
 #pragma once
-#include "metaprogramming/type_class.hpp"
+#include "metaprogramming/concepts.hpp"
 #include "type_flags.hpp"
+#include "macros.hpp"
+
 #include <utility>
 
 namespace eden {
