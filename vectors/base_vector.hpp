@@ -180,7 +180,7 @@ public:
     {return *m_ptr;}
 
     [[nodiscard]] constexpr T&
-    operator[](sz_t idx) const noexcept
+    operator[](count_t idx) const noexcept
     {return m_ptr[idx];}
 
     constexpr const_iterator&
@@ -200,11 +200,11 @@ public:
     {const_iterator tmp = *this; --m_ptr; return tmp;}
 
     constexpr const_iterator&
-    operator+=(sz_t n) noexcept
+    operator+=(count_t n) noexcept
     {m_ptr += n; return *this;}
 
     constexpr const_iterator&
-    operator-=(sz_t n) noexcept
+    operator-=(count_t n) noexcept
     {m_ptr -= n; return *this;}
 
     [[nodiscard]] friend constexpr std::ptrdiff_t
@@ -212,15 +212,15 @@ public:
     {return lhs.m_ptr - rhs.m_ptr;}
 
     [[nodiscard]] friend constexpr const_iterator
-    operator+(const_iterator lhs, sz_t n) noexcept
+    operator+(const_iterator lhs, count_t n) noexcept
     {return iterator(lhs.m_ptr + n);}
 
     [[nodiscard]] friend constexpr const_iterator
-    operator+(sz_t n, const_iterator rhs) noexcept
+    operator+(count_t n, const_iterator rhs) noexcept
     {return iterator(rhs.m_ptr - n);}
 
     [[nodiscard]] friend constexpr const_iterator
-    operator-(const_iterator lhs, sz_t n) noexcept
+    operator-(const_iterator lhs, count_t n) noexcept
     {return iterator(lhs.m_ptr - n);}
 
     [[nodiscard]] friend constexpr bool
@@ -256,7 +256,7 @@ public:
     {return *m_ptr;}
 
     [[nodiscard]] constexpr T&
-    operator[](sz_t idx) const noexcept
+    operator[](count_t idx) const noexcept
     {return m_ptr[idx];}
 
     constexpr iterator&
@@ -276,11 +276,11 @@ public:
     {iterator tmp = *this; --m_ptr; return tmp;}
 
     constexpr iterator&
-    operator+=(sz_t n) noexcept
+    operator+=(count_t n) noexcept
     {m_ptr += n; return *this;}
 
     constexpr iterator&
-    operator-=(sz_t n) noexcept
+    operator-=(count_t n) noexcept
     {m_ptr -= n; return *this;}
 
     [[nodiscard]] explicit constexpr
@@ -292,15 +292,15 @@ public:
     {return lhs.m_ptr - rhs.m_ptr;}
 
     [[nodiscard]] friend constexpr iterator
-    operator+(iterator lhs, sz_t n) noexcept
+    operator+(iterator lhs, count_t n) noexcept
     {return iterator(lhs.m_ptr + n);}
 
     [[nodiscard]] friend constexpr iterator
-    operator+(sz_t n, iterator rhs) noexcept
+    operator+(count_t n, iterator rhs) noexcept
     {return iterator(rhs.m_ptr + n);}
 
     [[nodiscard]] friend constexpr iterator
-    operator-(iterator lhs, sz_t n) noexcept
+    operator-(iterator lhs, count_t n) noexcept
     {return iterator(lhs.m_ptr - n);}
 
     [[nodiscard]] friend constexpr bool

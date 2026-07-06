@@ -43,4 +43,17 @@ template <class T> concept nothrow_move_assignable_c = std::is_nothrow_move_assi
 template <class T> concept swappable_c = std::swappable<T>;
 template <class T> concept nothrow_swappable_c = std::is_nothrow_swappable_v<T>;
 
+namespace detail {
+  template<template <class...> class A, class... T> struct is_a : std::false_type {};
+  template<template <class...> class A, class... T> struct is_a<A, A<T...>> : std::true_type {};
+}
+
+template <template <class...> class A, class... T>
+concept is_a_c = detail::is_a<A, T...>::value;
+
+template <class B, class C>
+struct Test {};
+
+static_assert(is_a_c< Test, Test<int, float> >);
+
 }

@@ -92,6 +92,9 @@ API:
 ### swap_vector.hpp
 An implementation of vector with customizeable transposition / move-to-front linear search functionality. <br>
 Elements are searched using a user provided predicate. When found, they are moved towards the back for faster searches in the future. <br>
+Providing swap_vector with T = KV_Pair<_, _> will cause the vector to determine it is a map. An alias, swap_map<K, V, ...> is provided to make this easier. <br>
+A swap_map will have duplicate methods that do not need a predicate and will take only one key. They will also have a subscript overload that is identical to normal search. <br>
+All search functions will instead return a pointer to the KV_Pair, which has members key and value. A nullptr return still indicates no such element was found. <br>
 
 Settings:
 - Stability: The rate at which elements are moved towards the back (lower is faster). A setting of 1 will immediately swap elements with the backmost position.

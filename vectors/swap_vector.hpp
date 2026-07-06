@@ -10,6 +10,17 @@
 
 namespace eden {
 
+template <class Key, class Value>
+struct KV_Pair {
+  using Key_t = Key;
+  using Value_t = Value;
+
+  Key key;
+  Value value;
+};
+
+inline constexpr auto swap_map_predicate = [] (auto const& kv, auto const& key) static { return kv.key == key; };
+
 /*
 *  Stability (default 4, recommended to be a power of 2 for faster integer division):
 *     -When a searched for element is found, it is swapped with the element size()/stability + 1 indices closer to the back.
@@ -32,7 +43,7 @@ struct swap_vector_settings {
   static constexpr base_vector_settings<Small, ExpansionMult> base_settings{};
 };
 
-template <class T, auto settings = swap_vector_settings{}, allocator_for_c<T> Allocator = std::allocator<T>>
+template <class T, swap_vector_settings settings = {}, allocator_for_c<T> Allocator = std::allocator<T>>
 requires std::swappable<T>
 class swap_vector : public base_vector<T, swap_vector<T, settings, Allocator>, settings.base_settings, Allocator> {
   static constexpr auto stability = settings.stability;
@@ -40,6 +51,8 @@ class swap_vector : public base_vector<T, swap_vector<T, settings, Allocator>, s
   using base = base_vector<T, swap_vector, settings.base_settings, Allocator>;
   friend class base_vector<T, swap_vector, settings.base_settings, Allocator>;
   using base::m_begin;
+
+  static constexpr auto is_map = is_a_c<KV_Pair, T>;
 
 public:
   using base::base;
@@ -75,6 +88,13 @@ public:
     return nullptr;
   }
 
+  // returns nullptr if not found. element will be moved backwards.
+  eden_always_inline [[nodiscard]] constexpr auto*
+  search(auto&& key)
+  noexcept(nothrow_swappable_c<T>)
+  requires (is_map and std::is_same_v<std::remove_cvref_t<decltype(key)>, typename T::Key_t>)
+  { return search(swap_map_predicate, std::forward<decltype(key)>(key)); }
+
   // returns nullptr if not found. element will be swapped directly into back.
   // does NOT respect PreserveBackmost.
   template<class ...KeyTypes>
@@ -97,7 +117,15 @@ public:
     return nullptr;
   }
 
-  // returns nullptr if not found. pointer is unstable and may point to bad data should this vector expand or another search be called.
+  // returns nullptr if not found. element will be swapped directly into back.
+  // does NOT respect PreserveBackmost.
+  eden_always_inline [[nodiscard]] constexpr auto*
+  search_swapback(auto&& key)
+  noexcept(nothrow_swappable_c<T>)
+  requires (is_map and std::is_same_v<std::remove_cvref_t<decltype(key)>, typename T::Key_t>)
+  { return search_swapback(swap_map_predicate, std::forward<decltype(key)>(key)); }
+
+  // returns nullptr if not found. pointer is stable only if no search functions other than this are called and no elements are added
   template<class ...KeyTypes>
   [[nodiscard]] constexpr T*
   search_noswap(auto&& Predicate, KeyTypes&&... key) const noexcept
@@ -110,6 +138,13 @@ public:
     }
     return nullptr;
   }
+
+  // returns nullptr if not found. pointer is stable only if no search functions other than this are called and no elements are added
+  eden_always_inline [[nodiscard]] constexpr auto*
+  search_noswap(auto&& key)
+  noexcept(nothrow_swappable_c<T>)
+  requires (is_map and std::is_same_v<std::remove_cvref_t<decltype(key)>, typename T::Key_t>)
+  { return search_noswap(swap_map_predicate, std::forward<decltype(key)>(key)); }
 
   // will swap each element into the index specified by GetIdxOf.
   // only really useful if the object itself keeps track of its original insertion order.
@@ -131,6 +166,24 @@ public:
   }
 
 
+  [[nodiscard]] constexpr T&
+  operator[](count_t idx) noexcept
+  requires (not is_map) {
+    assume_assert(m_begin); assert(idx < this->size());
+    return m_begin[idx];
+  }
+
+  // wrapper around search
+  eden_always_inline [[nodiscard]] constexpr auto*
+  operator [](auto&& key)
+  noexcept(nothrow_swappable_c<T>)
+  requires (is_map and std::is_same_v<std::remove_cvref_t<decltype(key)>, typename T::Key_t>)
+  { return search(swap_map_predicate, std::forward<decltype(key)>(key)); }
+
 };
+
+
+template <class Key, class Value, swap_vector_settings settings = {}, allocator_for_c<KV_Pair<Key, Value>> Allocator = std::allocator<KV_Pair<Key, Value>>>
+using swap_map = swap_vector<KV_Pair<Key, Value>, settings, Allocator>;
 
 }
