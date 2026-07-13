@@ -166,7 +166,7 @@ public:
   }
 
 
-  [[nodiscard]] constexpr T&
+  eden_always_inline [[nodiscard]] constexpr T&
   operator[](count_t idx) noexcept
   requires (not is_map) {
     assume_assert(m_begin); assert(idx < this->size());
