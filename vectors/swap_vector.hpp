@@ -75,7 +75,7 @@ public:
     auto const sz = n - static_cast<count_t>(preserve_back);
     --n;
 
-    auto const back_bubble = transposition ? sz / stability + 1 : 0;
+    auto const back_bubble = static_cast<count_t>(transposition ? sz / stability + 1 : 0);
     while (n-- > 0) {
       auto curr_ptr = this->m_begin + n;
       bool const hit = Predicate(*curr_ptr, keys...);
@@ -139,32 +139,73 @@ public:
     return nullptr;
   }
 
-  // returns nullptr if not found. pointer is stable only if no search functions other than this are called and no elements are added
+  // returns pointer to element, nullptr if not found. pointer is stable only if no search functions other than this are called and no elements are added
   eden_always_inline [[nodiscard]] constexpr auto*
   search_noswap(auto&& key)
   noexcept(nothrow_swappable_c<T>)
   requires (is_map and std::is_same_v<std::remove_cvref_t<decltype(key)>, typename T::Key_t>)
   { return search_noswap(swap_map_predicate, std::forward<decltype(key)>(key)); }
 
-  // will swap each element into the index specified by GetIdxOf.
+  // will swap each element into the unique index specified by GetIdxOf.
   // only really useful if the object itself keeps track of its original insertion order.
   // does NOT respect PreserveBackmost.
   constexpr void
   sort_by_unique_idx(auto&& GetIdxOf)
   noexcept(nothrow_swappable_c<T>)
-  requires(convertible_to_c<std::invoke_result_t<decltype(GetIdxOf), T const&>, count_t>) {
-    count_t curr_idx{};
+  requires( (not is_map) and convertible_to_c<std::invoke_result_t<decltype(GetIdxOf), T const&>, count_t>) {
     auto const sz = this->size();
-    while (curr_idx < sz) {
-      auto& curr = m_begin[curr_idx];
-      count_t const idx = GetIdxOf(curr); assume_assert(idx < sz);
-      if (idx not_eq curr_idx)
-        std::swap(curr, m_begin[idx]);
-
-      ++curr_idx;
+    count_t curr_idx{sz};
+    while (curr_idx-- > 0) {
+      auto& element = m_begin[curr_idx];
+      count_t const element_idx = GetIdxOf(element); assume_assert(element_idx < sz);
+      if (element_idx not_eq curr_idx)
+        std::swap(element, m_begin[element_idx]);
     }
   }
 
+  // returns pointer to element. pointer is stable if no functions other than this or search_noswap are called and no elements are added. WILL NOT RETURN NULLPTR.
+  // GetIdxOf should return the unique index to swap an element into
+  // First checks if element at index element_id has GetIdxOf(element) == element_id, returns pointer if true.
+  // If not, searches for an element such that GetIdxOf(element) == element_id and swaps that element into its proper index, then returns.
+  // Warning: assumes the container has an element with element_id. Treat this like operator[], ensure the vector has size() < element_id.
+  // does NOT respect PreserveBackmost.
+  [[nodiscard]] constexpr T*
+  gradual_sort_search(auto&& GetIdxOf, count_t element_id)
+  noexcept(nothrow_swappable_c<T>)
+  requires((not is_map) and convertible_to_c<std::invoke_result_t<decltype(GetIdxOf), T const&>, count_t>) {
+    auto const sz = this->size();
+    assert(not this->empty()); assume_assert(element_id < sz);
+    auto* res = m_begin + element_id;
+    if ( GetIdxOf(m_begin[element_id]) == element_id )
+      return res;
+
+    auto curr_idx{sz};
+    while (curr_idx-- not_eq 0) {
+      auto& element = m_begin[curr_idx];
+      count_t const idx = GetIdxOf(element); assume_assert(idx < sz);
+      if (idx == element_id) {
+        std::swap(element, m_begin[element_id]);
+        return res;
+      }
+    }
+
+    eden_unreachable("Element matching element_id was not found in eden::swap_vector::gradual_sort_search. Ensure that such element exists.");
+  }
+
+  // returns whether the vector is ordered, such that for all elements GetIdxOf(element) == the element's index in the vector
+  [[nodiscard]] constexpr bool
+  is_ordered(auto&& GetIdxOf)
+  noexcept(nothrow_swappable_c<T>)
+  requires((not is_map) and convertible_to_c<std::invoke_result_t<decltype(GetIdxOf), T const&>, count_t>) {
+    auto const sz = this->size();
+    auto curr_idx{sz};
+    while (curr_idx-- not_eq 0) {
+      auto& element = m_begin[curr_idx];
+      count_t const element_idx = GetIdxOf(element); assume_assert(element_idx < sz);
+      if (element_idx not_eq curr_idx) return false;
+    }
+    return true;
+}
 
   eden_always_inline [[nodiscard]] constexpr T&
   operator[](count_t idx) noexcept
@@ -182,6 +223,8 @@ public:
 
 };
 
+template <class T, allocator_for_c<T> Allocator = std::allocator<T>>
+using swap_vector16 = swap_vector<T, swap_vector_settings<4, false, true>{}, Allocator>;
 
 template <class Key, class Value, swap_vector_settings settings = {}, allocator_for_c<KV_Pair<Key, Value>> Allocator = std::allocator<KV_Pair<Key, Value>>>
 using swap_map = swap_vector<KV_Pair<Key, Value>, settings, Allocator>;

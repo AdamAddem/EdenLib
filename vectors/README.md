@@ -90,7 +90,7 @@ API:
 
 ### swap_vector.hpp
 An implementation of vector with customizeable transposition / move-to-front linear search functionality. <br>
-Elements are searched using a user provided predicate. When found, they are moved towards the back for faster searches in the future. <br>
+Elements are searched using a user provided predicate. When found, they are swapped towards the back for faster searches in the future. <br>
 Providing swap_vector with T = KV_Pair<_, _> will cause the vector to determine it is a map. An alias, swap_map<K, V, ...> is provided to make this easier. <br>
 A swap_map will have duplicate methods that do not need a predicate and will take only one key. They will also have a subscript overload that is identical to normal search. <br>
 All search functions will instead return a pointer to the KV_Pair, which has members key and value. A nullptr return still indicates no such element was found. <br>
@@ -110,7 +110,7 @@ API:
   T* search(auto&& Predicate, KeyTypes&&... key)
   requires(/* predicate accepts (T const&, KeyType...) and returns something convertible to bool */);
   
-  // variation that won't swap elements, useful if you need temporary stability or know the element searched is rare
+  // variation that won't swap elements, useful if you need temporary stability or know the element being searched is rare
   // this can also be used so assertions don't affect the state of the program
   template<class ...KeyTypes>
   T* search_noswap(auto&& Predicate, KeyTypes&&... key) const
@@ -125,17 +125,34 @@ API:
   // only really useful if the object itself keeps track of its original insertion order
   // does not respect PreserveBackmost
   constexpr void sort_by_unique_idx(auto&& GetIdxOf)
-  requires (/* predicate accepts (T const&) and returns an index */);
+  requires(/* is not map and count_t GetIdxOf(T const&); */);
+  
+  // returns pointer to element. pointer is stable if no functions other than this or search_noswap are called and no elements are added. WILL NOT RETURN NULLPTR.
+  // GetIdxOf should return the unique index to swap an element into
+  // First checks if element at index element_id has GetIdxOf(element) == element_id, returns pointer if true.
+  // If not, searches for an element such that GetIdxOf(element) == element_id and swaps that element into its proper index, then returns.
+  // Warning: assumes the container has an element with element_id. Treat this like operator[], ensure the vector has size() < element_id.
+  // does NOT respect PreserveBackmost.
+  constexpr T* gradual_sort_search(auto&& GetIdxOf, count_t element_id)
+  requires(/* is not map and count_t GetIdxOf(T const&); */);
+  
+  // returns whether the vector is ordered, such that for all elements GetIdxOf(element) == the element's index in the vector
+  constexpr bool is_ordered(auto&& GetIdxOf)
+  requires(/* is not map and count_t GetIdxOf(T const&); */);
+  
+  // wrapper around search
+  constexpr auto* operator [](auto&& key)
+  requires (/* is map and key is of keytype */);
   
  ```
 
 Example Usage:
 ```cpp
   struct Foo { int x; };
-  using pred = [] (Foo const& element, int key) { return element.x == key; };
+  using predicate = [] (Foo const& element, int key) { return element.x == key; };
   swap_vector<Foo> vec;
   ...
-  auto* res = vec.search(pred, 5);
+  auto* res = vec.search(predicate, 5);
 ```
 
 
