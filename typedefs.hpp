@@ -19,3 +19,5 @@ using f64_t = double; static_assert(sizeof(double) == 8); inline constexpr auto 
 using sz_t = std::size_t; inline constexpr auto sz_max = std::numeric_limits<sz_t>::max(); inline constexpr auto sz_min = std::numeric_limits<sz_t>::min();
 using iptr_t = std::intptr_t;
 using uptr_t = std::uintptr_t;
+
+using byte_t = std::byte; inline constexpr auto full_byte = byte_t{0xFF}; inline constexpr auto empty_byte = byte_t{0x00};

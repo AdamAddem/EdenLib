@@ -327,12 +327,12 @@ public:
   { call_derived allocate_from_empty(N); }
 
   constexpr explicit
-  base_vector(const Allocator &alloc)
+  base_vector(Allocator const& alloc)
   noexcept(std::is_nothrow_copy_constructible_v<Allocator>)
   : m_alloc(alloc) {}
 
   constexpr explicit
-  base_vector(count_t count, const Allocator &alloc = Allocator())
+  base_vector(count_t count, Allocator const& alloc = Allocator())
   noexcept(noexcept(allocate_and_construct(count)))
   requires default_constructible
   : m_alloc(alloc)
@@ -482,7 +482,7 @@ public:
       else  alloc_traits::construct(m_alloc, m_size++);
   }
 
-  constexpr void resize(count_t count, const T& value) noexcept
+  constexpr void resize(count_t count, T const& value) noexcept
   requires copy_constructible {
     if (m_begin == nullptr)
       return call_derived allocate_and_construct(count, value);
@@ -527,15 +527,15 @@ public:
     }
   }
 
-  eden_always_inline constexpr void push_back(const T& value)
+  eden_always_inline constexpr void push_back(T const& value)
   noexcept(nothrow_copy_construct)
   requires copy_constructible
-  { call_derived emplace_back(std::forward<const T>(value)); }
+  { call_derived emplace_back(value); }
 
   eden_always_inline constexpr void push_back(T&& value)
   noexcept(nothrow_move_construct)
   requires move_constructible
-  { call_derived emplace_back(std::forward<T>(value)); }
+  { call_derived emplace_back(std::move(value)); }
 
   eden_always_inline constexpr void pop_back()
   noexcept(nothrow_destruct) {

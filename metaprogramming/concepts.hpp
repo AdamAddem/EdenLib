@@ -51,9 +51,7 @@ namespace detail {
 template <template <class...> class A, class... T>
 concept is_a_c = detail::is_a<A, T...>::value;
 
-template <class B, class C>
-struct Test {};
-
-static_assert(is_a_c< Test, Test<int, float> >);
+template <class T, class... Ts>
+concept is_one_of = (same_c<T, Ts> or ...);
 
 }
