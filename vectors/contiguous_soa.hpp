@@ -15,7 +15,8 @@ namespace eden {
 namespace detail {
 
 template <class First, class... Rest>
-static constexpr void destroy_all(byte_t** begins, sz_t size, sz_t const* idx_arr) {
+eden_always_inline static constexpr void
+destroy_all(byte_t** begins, sz_t size, sz_t const* idx_arr) {
   if constexpr(sizeof...(Rest)) destroy_all<Rest...>(begins, size, idx_arr + 1);
   First* const first_begin = (First*)begins[idx_arr[0]];
   First* end = launder_cast(First, first_begin + size);
@@ -24,7 +25,8 @@ static constexpr void destroy_all(byte_t** begins, sz_t size, sz_t const* idx_ar
 }
 
 template <class First, class... Rest>
-static constexpr void move_construct_slices(byte_t** old_begins, byte_t* new_begin, sz_t size_each, sz_t const* idx_arr, sz_t new_capacity_each) {
+eden_always_inline static constexpr void
+move_construct_slices(byte_t** old_begins, byte_t* new_begin, sz_t size_each, sz_t const* idx_arr, sz_t new_capacity_each) {
   auto const my_idx = idx_arr[0];
   First* first_begin = launder_cast(First, old_begins[my_idx]);
   First* construct_location = (First*)new_begin;
@@ -40,7 +42,8 @@ static constexpr void move_construct_slices(byte_t** old_begins, byte_t* new_beg
 }
 
 template <class First, class... Rest>
-static constexpr void add_to_end(byte_t** begins, sz_t size_each, sz_t const* idx_arr, auto&& first_args, auto&&... rest_args) {
+eden_always_inline static constexpr void
+add_to_end(byte_t** begins, sz_t size_each, sz_t const* idx_arr, auto&& first_args, auto&&... rest_args) {
   First* open_slot = ( (First*)begins[idx_arr[0]] ) + size_each;
 
   std::apply(
@@ -59,6 +62,7 @@ static constexpr void add_to_end(byte_t** begins, sz_t size_each, sz_t const* id
 
 }
 
+// TODO: Add settings and custom allocator support
 template <class... Ts>
 requires (sizeof...(Ts) > 1)
 class contiguous_soa {
@@ -74,12 +78,14 @@ class contiguous_soa {
   requires is_one_of<T, Ts...>
   static constexpr sz_t mapped_idx = map_idx( idx_in_pack<T, Ts...> );
 
-  byte_t* begins[NumTs]{};  // pointers to the beginning of each types slice
-  sz_t  size_each{};           // number of active elements in each slice, aka the number of total active 'structs' we have
-  sz_t  capacity_each{};       // number of spots for elements in each slice, aka the number of 'structs' we can possibly house
-  sz_t  buffer_size_bytes{};   // size of the full buffer
+  byte_t* begins[NumTs]{};
+  sz_t    size_each{};
+  sz_t    capacity_each{};
+  sz_t    buffer_size_bytes{};
 
-  eden_always_inline [[nodiscard]] static constexpr byte_t* alloc_new_buffer(sz_t num_bytes) noexcept { return (byte_t*)::operator new(num_bytes, (std::align_val_t)TAlignmentsBytes.biggest_alignment); }
+  eden_always_inline [[nodiscard]] static byte_t* alloc_new_buffer(sz_t num_bytes) noexcept {
+    return (byte_t*)::operator new(num_bytes, (std::align_val_t)TAlignmentsBytes.biggest_alignment);
+  }
   eden_always_inline static constexpr void deallocate_at(byte_t* alloc, sz_t alloc_size_bytes) noexcept { ::operator delete(alloc, alloc_size_bytes, (std::align_val_t)TAlignmentsBytes.biggest_alignment); }
 
   eden_always_inline constexpr void deallocate() noexcept { deallocate_at(begins[buffer_begin_idx], buffer_size_bytes); }
@@ -90,8 +96,7 @@ class contiguous_soa {
     detail::destroy_all<Ts...>(begins, size_each, TAlignmentsBytes.map_to_idx);
   }
 
-  constexpr void
-  expand_to(sz_t new_capacity_each) {
+  void expand_to(sz_t new_capacity_each) {
     assume_assert(new_capacity_each >= capacity_each);
     auto const old_buffer_size_bytes = buffer_size_bytes;
     buffer_size_bytes = new_capacity_each *TSizesBytes.total_size; capacity_each = new_capacity_each;
@@ -101,8 +106,7 @@ class contiguous_soa {
     deallocate_at(old_buff, old_buffer_size_bytes);
   }
 
-  constexpr void
-  alloc_from_empty(sz_t new_capacity_each = FirstAllocCapacity) {
+  void alloc_from_empty(sz_t new_capacity_each = FirstAllocCapacity) {
     assume_assert(begins[0] == nullptr); assume_assert(size_each == 0); assume_assert(capacity_each == 0); assume_assert(buffer_size_bytes == 0);
     buffer_size_bytes = new_capacity_each * TSizesBytes.total_size;
     capacity_each = new_capacity_each;
@@ -116,8 +120,7 @@ public:
   constexpr contiguous_soa() = default;
 
   template <sz_t N>
-  constexpr explicit
-  contiguous_soa(flags::ReserveInitial<N>)
+  explicit contiguous_soa(flags::ReserveInitial<N>)
   { alloc_from_empty(N); }
 
   constexpr explicit
@@ -130,7 +133,7 @@ public:
     other.size_each = 0; other.capacity_each = 0; other.buffer_size_bytes = 0;
   }
 
-  constexpr contiguous_soa&
+  contiguous_soa&
   operator=(contiguous_soa&& other) noexcept  {
     destroy_all(); deallocate();
     size_each = other.size_each; capacity_each = other.capacity_each; buffer_size_bytes = other.buffer_size_bytes;
@@ -167,7 +170,7 @@ public:
   template <class T> eden_always_inline [[nodiscard]] constexpr std::span<T>       to_span()                  noexcept { return operator std::span<T>(); }
   template <class T> eden_always_inline [[nodiscard]] constexpr std::span<T const> to_span()            const noexcept { return operator std::span<const T>(); }
 
-  constexpr void reserve(sz_t new_capacity_each) noexcept {
+  void reserve(sz_t new_capacity_each) noexcept {
     if (begins[0] == nullptr)
       alloc_from_empty(new_capacity_each);
     else if (capacity_each < new_capacity_each)
@@ -175,15 +178,15 @@ public:
   }
 
   template <class... ArgTuples> // should be tuples of arguments, one tuple per member
-  constexpr void emplace_back(ArgTuples&&... args_for_each_element) {
+  void emplace_back(ArgTuples&&... args_for_each_element) {
     if(size_each == 0) alloc_from_empty();
     else if(size_each == capacity_each) expand_to(capacity_each * ExpansionMult);
     detail::add_to_end<Ts...>(begins, size_each, TAlignmentsBytes.map_to_idx, std::forward<ArgTuples>(args_for_each_element)...);
     ++size_each;
   }
 
-  eden_always_inline constexpr void push_back(Ts&&... new_elements) { return emplace_back(std::forward_as_tuple(new_elements)...); }
-  eden_always_inline constexpr void push_back(Ts const&... new_elements) { return emplace_back(std::forward_as_tuple(new_elements)...); }
+  eden_always_inline void push_back(Ts&&... new_elements) { return emplace_back(std::forward_as_tuple(new_elements)...); }
+  eden_always_inline void push_back(Ts const&... new_elements) { return emplace_back(std::forward_as_tuple(new_elements)...); }
 
   template<class T> eden_always_inline constexpr T&
   get(sz_t idx) noexcept {
@@ -193,7 +196,7 @@ public:
 
   template<class T>
   constexpr T&
-  get_at(sz_t idx) eden_throws(out_of_range) {
+  get_at(sz_t idx) eden_throws(std::out_of_range) {
     if (idx >= size_each)
       throw std::out_of_range(std::format("Element access at index {} in eden::contiguous_soa with individual size of {}.", idx, individual_size()));
     return launder_castT(begins[ mapped_idx<T> ])[idx];

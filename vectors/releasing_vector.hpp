@@ -57,8 +57,7 @@ class releasing_vector : public base_vector<T, releasing_vector<T, settings, All
   eden_always_inline [[nodiscard]] static constexpr header* get_header_from(T* data) noexcept { assume_assert(data not_eq nullptr); return std::launder((header*)(data - header_offset)); }
   eden_always_inline [[nodiscard]] constexpr header* header_ptr() const noexcept { return get_header_from(m_begin); }
 
-  constexpr void
-  construct_header() const noexcept {
+  void construct_header() const noexcept {
     new (header_ptr())
     header(
       base::alloc_traits::select_on_container_copy_construction(m_alloc),
@@ -66,8 +65,7 @@ class releasing_vector : public base_vector<T, releasing_vector<T, settings, All
       this->capacity());
   }
 
-  // Different
-  constexpr void allocate_from_empty(sz_t count)
+  void allocate_from_empty(sz_t count)
   noexcept(base::nothrow_allocating) {
     assume_assert(m_begin == nullptr);
     assume_assert(m_size == nullptr);
@@ -82,18 +80,15 @@ class releasing_vector : public base_vector<T, releasing_vector<T, settings, All
 #endif
   }
 
-  // Different
   constexpr void deallocate()
   noexcept(base::nothrow_deallocating) {
-    if (m_begin == nullptr)
-      return;
+    if (m_begin == nullptr) return;
 
     m_alloc.deallocate(m_begin - header_offset,  this->capacity() + header_offset);
     m_cap = m_size = m_begin = nullptr;
   }
 
-  // Different
-  constexpr void expand_to(sz_t count)
+  void expand_to(sz_t count)
   noexcept(base::nothrow_move_construct or base::nothrow_copy_construct) {
     assert(count >= this->size());
     T* new_buff = m_alloc.allocate(count + header_offset) + header_offset;
@@ -153,7 +148,7 @@ public:
   }
 
   template <sz_t N>
-  constexpr explicit
+  explicit
   releasing_vector(const char(&c_str)[N])
   noexcept(base::nothrow_allocating)
   requires is_string {

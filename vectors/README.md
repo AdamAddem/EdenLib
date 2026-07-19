@@ -15,8 +15,8 @@ Each implementation has the same API as std::vector, with some additions listed 
 ```
 
 ### Vector 'Settings'
-The vector implementations within this library each have custom settings, allowing you to specify some generic properties (expansion multiplier), 
-and some implementation properties (stability in swap_vector). <br>
+(Most) Vector implementations within this library each have custom settings, allowing you to specify some generic properties (expansion multiplier), 
+and implementation properties (stability in swap_vector). <br>
 To use customize each vector, pass the settings object into the respective vector's template argument as a non-type parameter. <br>
 I'd recommend that you create a type alias if using custom settings, as writing the entire typename is tedious. <br>
 ```using my_customization = releasing_vector<char, releasing_vector_settings<true, 3>{}>; ```
@@ -25,7 +25,7 @@ The common settings between most vectors is 'Small' and 'ExpansionMult':
 - ExpansionMult specifies the expansion rate of the vector after reaching capacity.
 
 ### releasing_vector.hpp
-An implementation of a vector able to 'release' ownership over its internal buffer. <br>
+An implementation of vector able to 'release' ownership over its internal buffer. <br>
 If the data is released, but needs to be accessed as if it were a vector again, a new releasing_vector can claim ownership. <br>
 When the data is no longer needed, the pointer can handle its own destruction through a method. <br>
 Iterator invalidation rules are consistent with std::vector.
@@ -37,7 +37,8 @@ Settings:
 
 API:
 ```cpp
-// constexpr, noexcept, and nodiscard are excluded for brevity.
+// noexcept, and nodiscard are excluded for brevity.
+// constexpr is not possible for most methods due to compile time type punning rules :(
 // methods identical to their std::vector counterparts are also excluded.
     
 /*  Constructors / Assignment */
@@ -104,7 +105,8 @@ Settings:
 API:
 ```cpp
   // constexpr, noexcept, and nodiscard are excluded for brevity.
-  // All following methods return nullptr if not found. Pointer is unstable and may point to bad data should the vector expand or another search be called.
+  // All following methods return nullptr if not found unless otherwise specified. 
+  // Pointer is unstable and may point to bad data should the vector expand or another search be called.
   
   template<class ...KeyTypes>
   T* search(auto&& Predicate, KeyTypes&&... key)
@@ -127,7 +129,7 @@ API:
   constexpr void sort_by_unique_idx(auto&& GetIdxOf)
   requires(/* is not map and count_t GetIdxOf(T const&); */);
   
-  // returns pointer to element. pointer is stable if no functions other than this or search_noswap are called and no elements are added. WILL NOT RETURN NULLPTR.
+  // returns pointer to element, never nullptr. pointer is stable if no functions other than this or search_noswap are called and no elements are added. WILL NOT RETURN NULLPTR.
   // GetIdxOf should return the unique index to swap an element into
   // First checks if element at index element_id has GetIdxOf(element) == element_id, returns pointer if true.
   // If not, searches for an element such that GetIdxOf(element) == element_id and swaps that element into its proper index, then returns.
@@ -154,6 +156,23 @@ Example Usage:
   ...
   auto* res = vec.search(predicate, 5);
 ```
+
+### contiguous_soa.hpp (WIP)
+An implementation of vector emulating a 'struct of arrays', with the added bonus that all 'arrays' are contiguous on the same buffer. <br>
+All fields have their own seperate 'slice' within the larger buffer, and this slice operates exactly like a normal vector's buffer. <br>
+push_back is used very similarly to typical push_back, with the caveat that you must an element for each field. <br>
+emplace_back requires tuples of arguments for each element. <br>
+
+Settings:
+    - None (yet)
+
+### multi_vector.hpp (WIP)
+An implementation of vector, similar to contiguous_soa, that allows for multiple types to be allocated on the same buffer. <br>
+It differs from contiguous_soa in that each type has its own fully seperate vector interface. Types may be pushed and popped independently. <br>
+When one slice's capacity fills, the whole vector must expand. This means you should not rely on pointer / iterator stability, even between types. <br>
+
+Settings:
+- None (yet)
 
 
 ### Creating your own implementation 
