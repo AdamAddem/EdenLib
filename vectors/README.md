@@ -19,10 +19,11 @@ Each implementation has the same API as std::vector, with some additions listed 
 and implementation properties (stability in swap_vector). <br>
 To use customize each vector, pass the settings object into the respective vector's template argument as a non-type parameter. <br>
 I'd recommend that you create a type alias if using custom settings, as writing the entire typename is tedious. <br>
-```using my_customization = releasing_vector<char, releasing_vector_settings<true, 3>{}>; ```
+```using my_customization = releasing_vector<char, releasing_vector_settings<false, true, 3>{}>; ```
 The common settings between most vectors is 'Small' and 'ExpansionMult':
 - Small will have the vector use a T* and two u32s for size and capacity, shrinking the vector's size to 16 bytes.
 - ExpansionMult specifies the expansion rate of the vector after reaching capacity.
+Move / copy constructors are defined for all vectors of the same type with compatible settings, whatever that may be for the specific vector. <br>
 
 ### releasing_vector.hpp
 An implementation of vector able to 'release' ownership over its internal buffer. <br>
@@ -32,27 +33,24 @@ Iterator invalidation rules are consistent with std::vector.
 - After release iterators are guaranteed to remain valid, provided the data is not reclaimed by another vector and subsequently changed.
 
 Settings:
+- StoreSizeAndCapacity: Determines whether the header contains the buffer's size and capacity. When false and the allocator is stateless, does not create a header at all.
+- CString: Whether to enable string capabilities (will always release a null terminated array). Does not perform SSO.
 - Expansion multiplier.
-- CString: Whether to enable string capabilities (will always release a null terminated array). Does not perform small-string-optimization.
 
 API:
 ```cpp
 // noexcept, and nodiscard are excluded for brevity.
 // constexpr is not possible for most methods due to compile time type punning rules :(
-// methods identical to their std::vector counterparts are also excluded.
+// methods identical to their std::vector counterparts are excluded.
     
 /*  Constructors / Assignment */
 
-    template <sz_t N> 
-    explicit (flags::ReserveInitial<N>); // pass in a flags::reserve_initial<N> instance 
+    template <sz_t N> explicit (flags::ReserveInitial<N>); // pass in a flags::reserve_initial<N> instance 
     
     explicit (released_ptr released_data) requires store_header;    // reclaims ownership over data previously released
-    explicit (released_span released_data) requires store_header;   // same as above
+    explicit (released_span released_data) requires store_header;
      
-    // copy constructor / assignment not implemented at the moment.
- 
-    // move constructor / assignment / swap defined only for releasing vectors with compatable settings
-    // settings are compatable if their CString value is the same 
+    // copy constructor / assignment unimplemented
     
 /*  Constructors / Assignment */
 

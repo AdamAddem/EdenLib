@@ -5,9 +5,9 @@
 #include "../typedefs.hpp"
 
 #include <memory>
-#include <print>
 #include <span>
 #include <string>
+#include <cstring>
 
 namespace eden {
 
@@ -31,6 +31,7 @@ requires (move_constructible_c<T> or copy_constructible_c<T>) and std::allocator
 class base_vector {
 protected:
   static constexpr u64_t expansion_mult = settings.expansion_mult;
+  static constexpr u64_t first_allocation_size = 1;
   static constexpr auto is_small = settings.is_small;
 
   static constexpr bool trivially_destructible = std::is_trivially_destructible_v<T>;
@@ -55,13 +56,15 @@ protected:
 #define call_derived static_cast<Derived*>(this)->
 #define call_derived_const static_cast<const Derived*>(this)->
 
-  constexpr void zero_members() noexcept {
+  eden_always_inline constexpr void zero_members() noexcept {
     if constexpr (is_small) m_begin = nullptr, m_size = 0, m_cap = 0;
     else m_cap = m_size = m_begin = nullptr;
   }
 
   using count_t = std::conditional_t<is_small, u32_t, sz_t>;
-  constexpr void allocate_from_empty(count_t count)
+
+  constexpr void
+  allocate_from_empty(count_t count)
   noexcept(nothrow_allocating) {
     if constexpr (is_small) {
       assume_assert(m_begin == nullptr);
@@ -82,13 +85,17 @@ protected:
   constexpr void deallocate()
   noexcept(nothrow_deallocating) {
     if (m_begin == nullptr) return;
-
     m_alloc.deallocate(m_begin,  call_derived capacity());
     call_derived zero_members();
   }
 
   constexpr void destroy()
   noexcept(nothrow_destruct) {
+    if constexpr(trivially_destructible) {
+      if constexpr(is_small) m_size = 0;
+      else m_size = m_begin;
+      return;
+    }
     if (m_begin == nullptr) return;
 
     if constexpr (is_small) {
@@ -100,46 +107,94 @@ protected:
   }
 
   template <class ...Args>
+  constexpr T&
+  emplace_back_unchecked(Args&&... args)
+  noexcept(std::is_nothrow_constructible_v<T, Args...>) {
+    assume_assert(m_begin); assume_assert(m_size not_eq m_cap);
+    if constexpr (is_small) {
+      auto const obj_location = m_begin + m_size;
+      alloc_traits::construct(m_alloc, obj_location, std::forward<Args>(args)...);
+      ++m_size;
+      return *obj_location;
+    }
+    else {
+      alloc_traits::construct(m_alloc, m_size, std::forward<Args>(args)...);
+      return *(m_size++);
+    }
+  }
+
+  template <class ...Args>
+  constexpr T&
+  grow_and_emplace(Args&&... args)
+  noexcept(std::is_nothrow_constructible_v<T, Args...>) {
+    if (m_begin == nullptr) call_derived allocate_from_empty(first_allocation_size);
+    else call_derived expand_to(call_derived capacity() * expansion_mult);
+    return call_derived emplace_back_unchecked(std::forward<Args>(args)...);
+  }
+
+  template <class ...Args>
   constexpr void allocate_and_construct(count_t count, Args&&... args)
   noexcept(nothrow_constructible_with_c<T, Args...>)
   requires constructible_with_c<T, Args...> {
     call_derived allocate_from_empty(count);
-
-    while (m_size not_eq m_cap) {
-      if constexpr(is_small)
-        alloc_traits::construct(m_alloc, m_begin + m_size++, std::forward<Args>(args)...);
-      else
-        alloc_traits::construct(m_alloc, m_size++, std::forward<Args>(args)...);
+    if constexpr(sizeof...(Args) == 0 and std::is_trivially_default_constructible_v<T>) {
+      std::memset(m_begin, 0, count * sizeof(T));
+      if constexpr(is_small) m_size = count;
+      else m_size = m_begin + count;
+    }
+    else if constexpr (sizeof...(Args) == 1 and std::is_trivially_constructible_v<T, Args...>) {
+      std::uninitialized_fill_n(m_begin, count, std::forward<Args>(args)...);
+      if constexpr(is_small) m_size = count;
+      else m_size = m_begin + count;
+    }
+    else {
+      while (m_size not_eq m_cap) {
+        if constexpr(is_small)
+          alloc_traits::construct(m_alloc, m_begin + m_size++, std::forward<Args>(args)...);
+        else
+          alloc_traits::construct(m_alloc, m_size++, std::forward<Args>(args)...);
+      }
     }
   }
 
-  constexpr void expand_to(count_t count)
+  constexpr void
+  expand_to(count_t count)
   noexcept(nothrow_move_construct or nothrow_copy_construct) {
     assert(count >= call_derived size());
     T* new_buff = m_alloc.allocate(count);
-    auto i{0uz};
 
     if constexpr(is_small) {
       if (count < m_cap) {
-        std::print("It seems like a small eden::vector overflowed. Old capacity: {} attempted to expand to {}.", m_cap, count);
-        eden_unreachable("oopsie!");
+        eden_unreachable("It seems like a small eden::vector overflowed.");
       }
     }
 
     auto const sz = call_derived size();
-    while (i < sz) {
-      alloc_traits::construct(m_alloc, new_buff + i, std::move_if_noexcept(m_begin[i]));
-      ++i;
+    if constexpr(eden_trivially_relocatable(T)) {
+      std::memcpy(new_buff, m_begin, sz * sizeof(T));
     }
-    call_derived destroy(); call_derived deallocate();
+    else {
+      auto i{0uz};
+      while (i not_eq sz) {
+        alloc_traits::construct(m_alloc, new_buff + i, std::move_if_noexcept(m_begin[i]));
+        ++i;
+      }
+      call_derived destroy();
+    }
+    call_derived deallocate();
     m_begin = new_buff;
 
     if constexpr (is_small) { m_size = sz; m_cap = count; }
-    else { m_size = m_begin + i; m_cap = m_begin + count; }
+    else { m_size = m_begin + sz; m_cap = m_begin + count; }
   }
 
   constexpr void destroy_n_backwards(count_t n)
   noexcept(nothrow_destruct) {
+    if constexpr (trivially_destructible) {
+      if constexpr(is_small) m_size = 0;
+      else m_size = m_begin;
+      return;
+    }
     assume_assert(m_begin); assert(call_derived size() >= n);
     while (n-- > 0) {
       if constexpr (is_small) alloc_traits::destroy(m_alloc, m_begin + --m_size);
@@ -147,7 +202,7 @@ protected:
     }
   }
 
-  constexpr ~base_vector()
+  eden_always_inline constexpr ~base_vector()
   noexcept(nothrow_destruct) {
     if (m_begin == nullptr) return;
     call_derived destroy(); call_derived deallocate();
@@ -217,7 +272,7 @@ public:
 
     [[nodiscard]] friend constexpr const_iterator
     operator+(count_t n, const_iterator rhs) noexcept
-    {return iterator(rhs.m_ptr - n);}
+    {return iterator(rhs.m_ptr + n);}
 
     [[nodiscard]] friend constexpr const_iterator
     operator-(const_iterator lhs, count_t n) noexcept
@@ -317,19 +372,15 @@ public:
   using const_reverse_iterator = std::reverse_iterator<const_iterator>;
   using reverse_iterator = std::reverse_iterator<iterator>;
 
-  constexpr base_vector()
-  noexcept(std::is_nothrow_default_constructible_v<Allocator>) = default;
+  eden_always_inline constexpr base_vector() noexcept(std::is_nothrow_default_constructible_v<Allocator>) = default;
 
   template <count_t N>
-  constexpr explicit
+  eden_always_inline constexpr explicit
   base_vector(flags::ReserveInitial<N>)
   noexcept(nothrow_allocating)
   { call_derived allocate_from_empty(N); }
 
-  constexpr explicit
-  base_vector(Allocator const& alloc)
-  noexcept(std::is_nothrow_copy_constructible_v<Allocator>)
-  : m_alloc(alloc) {}
+  eden_always_inline constexpr explicit base_vector(Allocator const& alloc) noexcept(std::is_nothrow_copy_constructible_v<Allocator>) : m_alloc(alloc) {}
 
   constexpr explicit
   base_vector(count_t count, Allocator const& alloc = Allocator())
@@ -344,37 +395,32 @@ public:
   : m_alloc(alloc)
   { call_derived allocate_and_construct(count, std::forward<T>(value)); }
 
-#define derived_other static_cast<Derived const&>(other)
-  constexpr base_vector(base_vector const& other)
+  [[nodiscard]] constexpr Derived
+  copy() const
   noexcept(nothrow_copy_construct)
   requires copy_constructible {
-    call_derived reserve(derived_other.size());
-    auto curr = derived_other.cbegin();
-    auto const end = derived_other.cend();
-    while (curr not_eq end) {
-      call_derived emplace_back(*curr);
-      ++curr;
+    auto const sz = call_derived_const size();
+    Derived res;
+    res.reserve(sz);
+    if constexpr(std::is_trivially_copy_constructible_v<T>) {
+      std::memcpy(res.m_begin, m_begin, sz * sizeof(T));
+      if constexpr(is_small) res.m_size = sz; else res.m_size = res.m_begin + sz;
     }
-  }
-
-  constexpr base_vector&
-  operator=(base_vector const& other)
-  noexcept(nothrow_copy_construct)
-  requires copy_constructible {
-    call_derived destroy(); call_derived reserve(derived_other.size());
-    auto curr = derived_other.cbegin();
-    auto const end = derived_other.cend();
-    while (curr not_eq end) {
-      call_derived emplace_back(*curr);
-      ++curr;
+    else {
+      auto curr = call_derived_const cbegin();
+      auto const end = call_derived_const cend();
+      while (curr not_eq end) {
+        res.emplace_back(*curr);
+        ++curr;
+      }
     }
-    return *this;
+    return res;
   }
-#undef derived_other
 
   template <base_vector_settings other_settings, allocator_for_c<T> other_allocator>
   requires compatible_settings<other_settings> and same_c<Allocator, other_allocator>
-  constexpr base_vector(base_vector<T, Derived, other_settings, other_allocator> &&other) noexcept
+  eden_always_inline constexpr
+  base_vector(base_vector<T, Derived, other_settings, other_allocator> &&other) noexcept
   : m_alloc(std::move(other.m_alloc)), m_begin(other.m_begin), m_size(other.m_size), m_cap(other.m_cap)
   { static_cast<Derived&>(other).zero_members(); }
 
@@ -404,14 +450,14 @@ public:
   [[nodiscard]] constexpr T&
   at(count_t idx) {
     if (idx >= call_derived size())
-      throw std::out_of_range(std::format("Element access at index {} in eden::base_vector with size of {}.", idx, call_derived size()));
+      throw std::out_of_range("Element access out of bounds in eden::base_vector");
     return m_begin[idx];
   }
 
   [[nodiscard]] constexpr const T&
   at(count_t idx) const {
     if (idx >= call_derived_const size())
-      throw std::out_of_range(std::format("Element access at index {} in eden::base_vector with size of {}.", idx, call_derived_const size()));
+      throw std::out_of_range("Element access out of bounds in eden::base_vector");
     return m_begin[idx];
   }
 
@@ -501,43 +547,35 @@ public:
       else alloc_traits::construct(m_alloc, m_size++, value);
   }
 
-  constexpr void shrink_to_fit() const noexcept {
-    if ( call_derived_const size() not_eq call_derived_const capacity())
-      call_derived_const expand_to(call_derived_const size());
+  constexpr void shrink_to_fit() noexcept {
+    if ( call_derived size() not_eq call_derived capacity())
+      call_derived expand_to(call_derived size());
   }
 
-  template <class... Args> constexpr T&
+  template <class... Args>
+  constexpr T&
   emplace_back(Args&&... args)
   noexcept(std::is_nothrow_constructible_v<T, Args...>)
   requires std::is_constructible_v<T, Args...> {
-    if (m_begin == nullptr)
-      call_derived allocate_from_empty(1);
-    else if (m_size == m_cap)
-      call_derived expand_to(call_derived capacity() * expansion_mult);
-
-    assume_assert(m_begin);
-    if constexpr (is_small) {
-      auto const obj_location = m_begin + m_size; ++m_size;
-      alloc_traits::construct(m_alloc, obj_location, std::forward<Args>(args)...);
-      return *obj_location;
-    }
-    else {
-      alloc_traits::construct(m_alloc, m_size, std::forward<Args>(args)...);
-      return *(m_size++);
-    }
+    if (m_size == m_cap) [[unlikely]]
+      return call_derived grow_and_emplace(std::forward<Args>(args)...);
+    return call_derived emplace_back_unchecked(std::forward<Args>(args)...);
   }
 
-  eden_always_inline constexpr void push_back(T const& value)
+  eden_always_inline constexpr void
+  push_back(T const& value)
   noexcept(nothrow_copy_construct)
   requires copy_constructible
   { call_derived emplace_back(value); }
 
-  eden_always_inline constexpr void push_back(T&& value)
+  eden_always_inline constexpr void
+  push_back(T&& value)
   noexcept(nothrow_move_construct)
   requires move_constructible
   { call_derived emplace_back(std::move(value)); }
 
-  eden_always_inline constexpr void pop_back()
+  eden_always_inline constexpr void
+  pop_back()
   noexcept(nothrow_destruct) {
     assume_assert(m_begin); assume_assert(m_size not_eq m_begin);
     if constexpr(is_small) alloc_traits::destroy(m_alloc, m_begin + --m_size);

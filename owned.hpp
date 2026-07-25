@@ -1,4 +1,5 @@
 #pragma once
+#include "macros.hpp"
 #include "metaprogramming/concepts.hpp"
 #include "string_utils.hpp"
 #include "typedefs.hpp"
@@ -25,14 +26,16 @@ class owned_ptr {
   ptr internal{nullptr};
 
 public:
-  constexpr            owned_ptr()                  noexcept = default;
-  constexpr explicit   owned_ptr(std::nullptr_t)    noexcept {}
-  constexpr explicit   owned_ptr(ptr&& mine_now)    noexcept : internal(mine_now) {}
-                       owned_ptr(owned_ptr const&)           = delete;
-            owned_ptr& operator=(owned_ptr const&)           = delete;
+  eden_always_inline constexpr            owned_ptr()                  noexcept = default;
+  eden_always_inline constexpr            ~owned_ptr()                 noexcept = default;
+  eden_always_inline constexpr explicit   owned_ptr(std::nullptr_t)    noexcept {}
+  eden_always_inline constexpr explicit   owned_ptr(ptr&& mine_now)    noexcept : internal(mine_now) {}
+  
+  owned_ptr(owned_ptr const&) = delete;
+  owned_ptr& operator=(owned_ptr const&) = delete;
 
-  constexpr            owned_ptr(owned_ptr&& other) noexcept : internal(other.internal) { other.internal = nullptr; }
-  constexpr owned_ptr& operator=(owned_ptr&& other) noexcept { internal = other.internal; other.internal = nullptr; return *this; }
+  eden_always_inline constexpr            owned_ptr(owned_ptr&& other) noexcept : internal(other.internal) { other.internal = nullptr; }
+  eden_always_inline constexpr owned_ptr& operator=(owned_ptr&& other) noexcept { internal = other.internal; other.internal = nullptr; return *this; }
 
   eden_always_inline [[nodiscard]] constexpr ptr       get()                            noexcept                    { return internal; }
   eden_always_inline [[nodiscard]] constexpr const_ptr get()                      const noexcept                    { return internal; }
@@ -280,41 +283,22 @@ public:
   using const_reverse_iterator = std::reverse_iterator<const_iterator>;
   using reverse_iterator = std::reverse_iterator<iterator>;
 
-  [[nodiscard]] constexpr iterator begin() noexcept {return iterator(internal);}
+  eden_always_inline [[nodiscard]] constexpr iterator begin() noexcept {return iterator(internal);}
+  eden_always_inline [[nodiscard]] constexpr const_iterator begin() const noexcept {return const_iterator(internal);}
+  eden_always_inline [[nodiscard]] constexpr const_iterator cbegin() const noexcept {return const_iterator(internal);}
+  eden_always_inline [[nodiscard]] constexpr reverse_iterator rbegin() noexcept {return reverse_iterator(end());}
+  eden_always_inline [[nodiscard]] constexpr const_reverse_iterator rbegin() const noexcept {return const_reverse_iterator(cend());}
+  eden_always_inline [[nodiscard]] constexpr const_reverse_iterator crbegin() const noexcept {return const_reverse_iterator(cend());}
+  eden_always_inline [[nodiscard]] constexpr iterator end() noexcept {return iterator(internal + size());}
+  eden_always_inline [[nodiscard]] constexpr const_iterator end() const noexcept {return const_iterator(internal + size());}
+  eden_always_inline [[nodiscard]] constexpr const_iterator cend() const noexcept {return const_iterator(internal + size());}
+  eden_always_inline [[nodiscard]] constexpr reverse_iterator rend() noexcept {return reverse_iterator(begin());}
+  eden_always_inline [[nodiscard]] constexpr const_reverse_iterator rend() const noexcept {return const_reverse_iterator(cbegin());}
+  eden_always_inline [[nodiscard]] constexpr const_reverse_iterator crend() const noexcept {return const_reverse_iterator(cbegin());}
 
-  [[nodiscard]] constexpr const_iterator begin() const noexcept {return const_iterator(internal);}
-
-  [[nodiscard]] constexpr const_iterator cbegin() const noexcept {return const_iterator(internal);}
-
-  [[nodiscard]] constexpr reverse_iterator rbegin() noexcept {return reverse_iterator(end());}
-
-  [[nodiscard]] constexpr const_reverse_iterator rbegin() const noexcept {return const_reverse_iterator(cend());}
-
-  [[nodiscard]] constexpr const_reverse_iterator crbegin() const noexcept {return const_reverse_iterator(cend());}
-
-  [[nodiscard]] constexpr iterator end() noexcept {return iterator(internal + size());}
-
-  [[nodiscard]] constexpr const_iterator end() const noexcept {return const_iterator(internal + size());}
-
-  [[nodiscard]] constexpr const_iterator cend() const noexcept {return const_iterator(internal + size());}
-
-  [[nodiscard]] constexpr reverse_iterator rend() noexcept {return reverse_iterator(begin());}
-
-  [[nodiscard]] constexpr const_reverse_iterator rend() const noexcept {return const_reverse_iterator(cbegin());}
-
-  [[nodiscard]] constexpr const_reverse_iterator crend() const noexcept {return const_reverse_iterator(cbegin());}
-
-  constexpr owned_span() noexcept requires dynamicly_sized : internal(nullptr) {}
-
-  constexpr explicit
-  owned_span(T* mine_now, sz_t count) noexcept
-  requires dynamicly_sized
-  : internal(mine_now), length{count} {}
-
-  constexpr explicit
-  owned_span(owned_ptr<T[]> mine_now, sz_t count) noexcept
-  requires dynamicly_sized
-  : internal(mine_now.release()), length{count} {}
+  eden_always_inline constexpr owned_span() noexcept requires dynamicly_sized : internal(nullptr) {}
+  eden_always_inline constexpr explicit owned_span(T* mine_now, sz_t count) noexcept requires dynamicly_sized : internal(mine_now), length{count} {}
+  eden_always_inline constexpr explicit owned_span(owned_ptr<T[]> mine_now, sz_t count) noexcept requires dynamicly_sized : internal(mine_now.release()), length{count} {}
 
   template <sz_t N>
   constexpr explicit
