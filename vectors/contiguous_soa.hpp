@@ -1,11 +1,12 @@
 #pragma once
-#include "../typedefs.hpp"
 #include "../metaprogramming/packs.hpp"
 #include "../type_flags.hpp"
+#include "../typedefs.hpp"
 
 #include <cstring>
-#include <format>
 #include <exception>
+#include <format>
+#include <utility>
 
 namespace eden {
 

@@ -61,7 +61,7 @@ static constexpr const char(&append_number_to_literal)[str_size+22] = append_num
 // assumes neither ptr is null
 [[nodiscard]] constexpr char*
 stpcpy_restrict(char* eden_restrict dest, const char* eden_restrict src) noexcept {
-  assume_assert(dest); assume_assert(src);
+  assert(dest); assert(src);
   while (true) {
     *dest = *src;
     ++dest; ++src;
@@ -77,7 +77,7 @@ stpcpy_restrict(char* eden_restrict dest, const char* eden_restrict src) noexcep
 // assumes neither ptr is null
 [[nodiscard]] constexpr char*
 stpcpy(char* dest, const char* src) noexcept {
-  assume_assert(dest); assume_assert(src);
+  assert(dest); assert(src);
   while (true) {
     *dest = *src;
     ++dest; ++src;
@@ -90,7 +90,7 @@ stpcpy(char* dest, const char* src) noexcept {
 
 [[nodiscard]] constexpr bool
 streq_restrict(const char* eden_restrict first, const char* eden_restrict second, sz_t len) noexcept {
-  assume_assert(first); assume_assert(second);
+  assert(first); assert(second);
   auto i{0uz};
   while (i not_eq len) {
     if (first[i] not_eq second[i])
@@ -102,7 +102,7 @@ streq_restrict(const char* eden_restrict first, const char* eden_restrict second
 
 [[nodiscard]] constexpr bool
 streq_restrict(const char* eden_restrict first, const char* eden_restrict second) noexcept {
-  assume_assert(first); assume_assert(second);
+  assert(first); assert(second);
 
   auto i{0uz};
   while (true) {

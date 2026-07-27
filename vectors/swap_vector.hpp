@@ -157,7 +157,7 @@ public:
     count_t curr_idx{sz};
     while (curr_idx-- > 0) {
       auto& element = m_begin[curr_idx];
-      count_t const element_idx = GetIdxOf(element); assume_assert(element_idx < sz);
+      count_t const element_idx = GetIdxOf(element); assert(element_idx < sz);
       if (element_idx not_eq curr_idx)
         std::swap(element, m_begin[element_idx]);
     }
@@ -174,7 +174,7 @@ public:
   noexcept(nothrow_swappable_c<T>)
   requires((not is_map) and convertible_to_c<std::invoke_result_t<decltype(GetIdxOf), T const&>, count_t>) {
     auto const sz = this->size();
-    assert(not this->empty()); assume_assert(element_id < sz);
+    assert(not this->empty()); assert(element_id < sz);
     auto* res = m_begin + element_id;
     if ( GetIdxOf(m_begin[element_id]) == element_id )
       return res;
@@ -182,7 +182,7 @@ public:
     auto curr_idx{sz};
     while (curr_idx-- not_eq 0) {
       auto& element = m_begin[curr_idx];
-      count_t const idx = GetIdxOf(element); assume_assert(idx < sz);
+      count_t const idx = GetIdxOf(element); assert(idx < sz);
       if (idx == element_id) {
         std::swap(element, m_begin[element_id]);
         return res;
@@ -201,7 +201,7 @@ public:
     auto curr_idx{sz};
     while (curr_idx-- not_eq 0) {
       auto& element = m_begin[curr_idx];
-      count_t const element_idx = GetIdxOf(element); assume_assert(element_idx < sz);
+      count_t const element_idx = GetIdxOf(element); assert(element_idx < sz);
       if (element_idx not_eq curr_idx) return false;
     }
     return true;
@@ -210,7 +210,7 @@ public:
   eden_always_inline [[nodiscard]] constexpr T&
   operator[](count_t idx) noexcept
   requires (not is_map) {
-    assume_assert(m_begin); assert(idx < this->size());
+    assert(m_begin); assert(idx < this->size());
     return m_begin[idx];
   }
 

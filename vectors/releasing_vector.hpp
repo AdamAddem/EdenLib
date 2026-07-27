@@ -73,7 +73,7 @@ class releasing_vector : public base_vector<T, releasing_vector<T, settings, All
   static constexpr u64_t header_offset = (not has_header) ? 0 :
     (Tsz >= header_size ? 1 : (header_size + Tsz - 1) / Tsz);
 
-  eden_always_inline [[nodiscard]] static constexpr header* get_header_from(T* data) noexcept requires has_header { assume_assert(data not_eq nullptr); return std::launder((header*)(data - header_offset)); }
+  eden_always_inline [[nodiscard]] static constexpr header* get_header_from(T* data) noexcept requires has_header { assert(data not_eq nullptr); return std::launder((header*)(data - header_offset)); }
   eden_always_inline [[nodiscard]] constexpr header* header_ptr() const noexcept requires has_header { return get_header_from(m_begin); }
 
   eden_always_inline void
@@ -89,9 +89,9 @@ class releasing_vector : public base_vector<T, releasing_vector<T, settings, All
   constexpr void
   allocate_from_empty(sz_t count)
   noexcept(base::nothrow_allocating) {
-    assume_assert(m_begin == nullptr);
-    assume_assert(m_size == nullptr);
-    assume_assert(m_cap == nullptr);
+    assert(m_begin == nullptr);
+    assert(m_size == nullptr);
+    assert(m_cap == nullptr);
 
     m_size = m_begin = m_alloc.allocate(count + header_offset) + header_offset;
     m_cap = m_begin + count;
@@ -166,7 +166,7 @@ public:
   releasing_vector(released_ptr released_data)
   noexcept(base::nothrow_move_construct)
   requires store_size_and_capacity {
-    assume_assert(m_begin not_eq nullptr);
+    assert(m_begin not_eq nullptr);
     m_begin = released_data.release();
     auto h = get_header_pointer_from(m_begin);
     m_alloc = std::move(h->alloc);
@@ -336,7 +336,7 @@ public:
         return false;
       ++i;
     }
-    assume_assert(c_str[N-1] == '\0' and "Pass a null-terminated string to this function, doofus.");
+    assert(c_str[N-1] == '\0' and "Pass a null-terminated string to this function, doofus.");
     return true;
   }
 

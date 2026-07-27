@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <memory>
 
 using i8_t = std::int8_t;     inline constexpr auto i8_max = std::numeric_limits<i8_t>::max();   inline constexpr auto i8_min = std::numeric_limits<i8_t>::min();
 using u8_t = std::uint8_t;    inline constexpr auto u8_max = std::numeric_limits<u8_t>::max();   inline constexpr auto u8_min = std::numeric_limits<u8_t>::min();
@@ -21,3 +22,4 @@ using iptr_t = std::intptr_t;
 using uptr_t = std::uintptr_t;
 
 using byte_t = std::byte; inline constexpr auto full_byte = byte_t{0xFF}; inline constexpr auto empty_byte = byte_t{0x00};
+using align_t = std::align_val_t;
