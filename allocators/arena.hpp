@@ -2,7 +2,6 @@
 #include "basic_allocator.hpp"
 
 namespace eden {
-
 // Exclusive dictates whether the owner of the arena has exclusive ownership over the data
 template <sz_t NBytes = 4096, align_t ArenaAlignment = align_t{64}, bool Exclusive = false>
 class Arena {
@@ -29,7 +28,7 @@ public:
   template <class T = byte_t>
   requires (sizeof(T) <= NBytes)
   [[nodiscard]] constexpr T*
-  allocate(sz_t count, align_t = align_t{}) noexcept {
+  allocate(sz_t count, align_t = {}) noexcept {
     auto const alloc_bytes = count * sizeof(T);
 
     void* tmp = end;
@@ -64,7 +63,7 @@ public:
   template <class T>
   requires (sizeof(T) <= NBytes)
   [[nodiscard]] constexpr T*
-  reallocate(T* old_buff, sz_t old_count, sz_t new_count, align_t) noexcept {
+  reallocate(T* old_buff, sz_t old_count, sz_t new_count, align_t = {}) noexcept {
     if( (byte_t*)(old_buff + old_count) not_eq end )
       return allocate(new_count);
 
@@ -82,10 +81,9 @@ public:
     return std::start_lifetime_as_array<T>(old_buff, new_count);
   }
 
-  eden_always_inline static void deallocate(void*, align_t)       noexcept {}
-  eden_always_inline static void deallocate(void*, sz_t)          noexcept {}
-  eden_always_inline static void deallocate(void*, sz_t, align_t) noexcept {}
-}; static_assert(allocator_c<Arena<>>);
+  eden_always_inline static void deallocate(void*, align_t = {})       noexcept {}
+  eden_always_inline static void deallocate(void*, sz_t, align_t = {}) noexcept {}
+}; static_assert(raw_allocator_c< Arena<> >);
 
 
 template <sz_t NBytes = 4096, align_t ArenaAlignment = align_t{64}, bool Exclusive = false>
@@ -106,22 +104,29 @@ public:
   template <class T = byte_t>
   requires (sizeof(T) <= NBytes)
   [[nodiscard]] T*
-  allocate(sz_t count, align_t) noexcept {
+  allocate(sz_t count, align_t = {}) noexcept {
     auto res = arenas.back().template allocate<T>(count);
     if (res) return res;
-    arenas.emplace_back();
-    res = arenas.back().template allocate<T>(count);
+    res = arenas.emplace_back().template allocate<T>(count);
     assert(res);
     return res;
   }
 
-  eden_always_inline static void deallocate(void*, align_t)       noexcept {}
-  eden_always_inline static void deallocate(void*, sz_t)          noexcept {}
-  eden_always_inline static void deallocate(void*, sz_t, align_t) noexcept {}
+  eden_always_inline [[nodiscard]] constexpr byte_t*
+  allocate_raw(sz_t byte_count, align_t alignment) noexcept {
+    auto res = arenas.back().allocate_raw(byte_count, alignment);
+    if (res) return res;
+    res = arenas.emplace_back().allocate_raw(byte_count, alignment);
+    assert(res);
+    return res;
+  }
+
+  eden_always_inline static void deallocate(void*, align_t = {})       noexcept {}
+  eden_always_inline static void deallocate(void*, sz_t, align_t = {}) noexcept {}
 
   ArenaPool(ArenaPool const&) = delete;
   ArenaPool(ArenaPool&&) = delete;
   ArenaPool& operator=(ArenaPool const&) = delete;
   ArenaPool& operator=(ArenaPool&&) = delete;
-}; static_assert(allocator_c< ArenaPool<> >);
+}; static_assert(raw_allocator_c< ArenaPool<> >);
 }

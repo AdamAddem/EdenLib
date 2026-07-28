@@ -27,8 +27,8 @@ struct base_vector_settings {
 };
 
 /* Note that there is zero exception safety, and copy constructor/assignment are unimplemented currently. */
-template <class T, class Derived, base_vector_settings settings = base_vector_settings{}, allocator_c Allocator = BasicAllocator<T>>
-requires (move_constructible_c<T> or copy_constructible_c<T>) and std::allocator_traits<Allocator>::propagate_on_container_move_assignment::value
+template <class T, class Derived, base_vector_settings settings = base_vector_settings{}, allocator_for_c<T> Allocator = BasicAllocator<T>>
+requires (move_constructible_c<T> or copy_constructible_c<T>) and std::is_move_constructible_v<Allocator>
 class base_vector {
 protected:
   static constexpr u64_t expansion_mult = settings.expansion_mult;
@@ -44,13 +44,11 @@ protected:
   static constexpr bool nothrow_copy_construct = std::is_nothrow_copy_constructible_v<T>;
 
   [[no_unique_address]] Allocator m_alloc;
-  static constexpr bool stateless_allocator = std::allocator_traits<Allocator>::is_always_equal;
   static constexpr bool nothrow_destruct = std::is_nothrow_destructible_v<T>;
   static constexpr bool nothrow_allocating = noexcept(m_alloc.allocate(1));
   static constexpr bool nothrow_deallocating = noexcept(m_alloc.deallocate(static_cast<T*>(nullptr), 1));
 
   T* m_begin{};
-
   std::conditional_t<is_small, u32_t, T*> m_size{};
   std::conditional_t<is_small, u32_t, T*> m_cap{};
 #define call_derived static_cast<Derived*>(this)->
@@ -417,14 +415,14 @@ public:
     return res;
   }
 
-  template <base_vector_settings other_settings, allocator_c other_allocator>
+  template <base_vector_settings other_settings, allocator_for_c<T> other_allocator>
   requires compatible_settings<other_settings> and same_c<Allocator, other_allocator>
   eden_always_inline constexpr
   base_vector(base_vector<T, Derived, other_settings, other_allocator> &&other) noexcept
   : m_alloc(std::move(other.m_alloc)), m_begin(other.m_begin), m_size(other.m_size), m_cap(other.m_cap)
   { static_cast<Derived&>(other).zero_members(); }
 
-  template <base_vector_settings other_settings, allocator_c other_allocator>
+  template <base_vector_settings other_settings, allocator_for_c<T> other_allocator>
   requires compatible_settings<other_settings> and same_c<Allocator, other_allocator>
   constexpr void swap(base_vector<T, Derived, other_settings, other_allocator>& other) noexcept {
     std::swap(m_alloc, other.m_alloc);
@@ -432,7 +430,7 @@ public:
     std::swap(m_cap, other.m_cap); std::swap(m_alloc, other.m_alloc);
   }
 
-  template <base_vector_settings other_settings, allocator_c other_allocator>
+  template <base_vector_settings other_settings, allocator_for_c<T> other_allocator>
   requires compatible_settings<other_settings> and same_c<Allocator, other_allocator>
   constexpr Derived&
   operator=(base_vector<T, Derived, other_settings, other_allocator> &&other) noexcept {
@@ -579,7 +577,7 @@ public:
   }
 };
 
-template <class T, class Derived, base_vector_settings lhs_settings, base_vector_settings rhs_settings, allocator_c allocator>
+template <class T, class Derived, base_vector_settings lhs_settings, base_vector_settings rhs_settings, allocator_for_c<T> allocator>
 requires base_vector<T, Derived, lhs_settings, allocator>::template compatible_settings<rhs_settings>
 [[nodiscard]] constexpr bool
 operator==(const base_vector<T, Derived, lhs_settings, allocator>& lhs, const base_vector<T, Derived, rhs_settings, allocator>& rhs) noexcept

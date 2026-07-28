@@ -30,7 +30,7 @@ struct releasing_vector_settings {
   static constexpr base_vector_settings<false, ExpansionMult> base_settings{};
 };
 
-template <class T, auto settings = releasing_vector_settings{}, allocator_for_c<T> Allocator = std::allocator<T>>
+template <class T, auto settings = releasing_vector_settings{}, allocator_for_c<T> Allocator = BasicAllocator<T>>
 requires (settings.is_string ? (sizeof(T) == 1 and type<T>::is_integral) : true)
 class releasing_vector : public base_vector<T, releasing_vector<T, settings, Allocator>, settings.base_settings, Allocator>  {
 
@@ -49,7 +49,7 @@ class releasing_vector : public base_vector<T, releasing_vector<T, settings, All
   static constexpr bool store_size_and_capacity = settings.store_size_and_capacity;
   static_assert(store_size_and_capacity ? true : trivially_destructible, "Not storing size and capacity is only possible if the type is trivially destructible.");
 
-  static constexpr bool has_header = not base::alloc_traits::is_always_equal::value or store_size_and_capacity;
+  static constexpr bool has_header = not Allocator::stateless or store_size_and_capacity;
 
   struct header_sz_cap {
     [[no_unique_address]] Allocator alloc;
@@ -123,7 +123,7 @@ class releasing_vector : public base_vector<T, releasing_vector<T, settings, All
     } else {
       auto i{0uz};
       while (i not_eq sz) {
-        base::alloc_traits::construct(m_alloc, new_buff + i, std::move_if_noexcept(m_begin[i]));
+        std::construct_at(new_buff + i, std::move_if_noexcept(m_begin[i]));
         ++i;
       }
       this->destroy();
@@ -257,7 +257,7 @@ public:
     if constexpr (not trivially_destructible) {
       auto size = header_ptr->size;
       while (size not_eq 0)
-        base::alloc_traits::destroy(alloc, data.get() + --size);
+        std::destroy_at(data.get() + --size);
     }
     auto const cap = header_ptr->capacity;
     std::destroy_at(header_ptr);

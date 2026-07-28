@@ -43,7 +43,7 @@ struct swap_vector_settings {
   static constexpr base_vector_settings<Small, ExpansionMult> base_settings{};
 };
 
-template <class T, swap_vector_settings settings = {}, allocator_for_c<T> Allocator = std::allocator<T>>
+template <class T, swap_vector_settings settings = {}, allocator_for_c<T> Allocator = BasicAllocator<T>>
 requires std::swappable<T>
 class swap_vector : public base_vector<T, swap_vector<T, settings, Allocator>, settings.base_settings, Allocator> {
   static constexpr auto stability = settings.stability;
@@ -223,10 +223,10 @@ public:
 
 };
 
-template <class T, allocator_for_c<T> Allocator = std::allocator<T>>
+template <class T, allocator_for_c<T> Allocator = BasicAllocator<T>>
 using swap_vector16 = swap_vector<T, swap_vector_settings<4, false, true>{}, Allocator>;
 
-template <class Key, class Value, swap_vector_settings settings = {}, allocator_for_c<KV_Pair<Key, Value>> Allocator = std::allocator<KV_Pair<Key, Value>>>
+template <class Key, class Value, swap_vector_settings settings = {}, allocator_for_c<KV_Pair<Key, Value>> Allocator = BasicAllocator<KV_Pair<Key, Value>>>
 using swap_map = swap_vector<KV_Pair<Key, Value>, settings, Allocator>;
 
 }
