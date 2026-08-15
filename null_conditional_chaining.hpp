@@ -6,8 +6,7 @@ namespace eden {
 
 template <class T, class First, class... Remaining>
 eden_always_inline constexpr auto call_methods_conditionally(T ptr, First first, Remaining... rest)
-noexcept(noexcept(call_methods_conditionally(first(ptr), rest...)))
--> decltype(call_methods_conditionally(first(ptr), rest...))
+noexcept(noexcept(call_methods_conditionally(first(ptr), rest...))) -> decltype(call_methods_conditionally(first(ptr), rest...))
 requires std::is_pointer_v<decltype(first(ptr))> {
   if (ptr)
     return call_methods_conditionally(first(ptr), rest...);
