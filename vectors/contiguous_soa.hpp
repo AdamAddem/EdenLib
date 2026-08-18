@@ -98,7 +98,7 @@ class contiguous_soa {
   }
 
   void expand_to(sz_t new_capacity_each) {
-    assume_assert(new_capacity_each >= capacity_each);
+    assert(new_capacity_each >= capacity_each);
     auto const old_buffer_size_bytes = buffer_size_bytes;
     buffer_size_bytes = new_capacity_each *TSizesBytes.total_size; capacity_each = new_capacity_each;
     auto const new_alloc = alloc_new_buffer(buffer_size_bytes);
@@ -108,7 +108,7 @@ class contiguous_soa {
   }
 
   void alloc_from_empty(sz_t new_capacity_each = FirstAllocCapacity) {
-    assume_assert(begins[0] == nullptr); assume_assert(size_each == 0); assume_assert(capacity_each == 0); assume_assert(buffer_size_bytes == 0);
+    assert(begins[0] == nullptr); assert(size_each == 0); assert(capacity_each == 0); assert(buffer_size_bytes == 0);
     buffer_size_bytes = new_capacity_each * TSizesBytes.total_size;
     capacity_each = new_capacity_each;
     begins[buffer_begin_idx] = alloc_new_buffer(buffer_size_bytes);
@@ -159,10 +159,10 @@ public:
   eden_always_inline [[nodiscard]] constexpr bool empty()               const noexcept { return size_each == 0; }
   eden_always_inline               constexpr void clear()                     noexcept { destroy_all(); }
 
-  template <class T> eden_always_inline [[nodiscard]] constexpr T&       front()        noexcept { assume_assert(size_each not_eq 0); return launder_castT(begins[mapped_idx<T>])[0]; }
-  template <class T> eden_always_inline [[nodiscard]] constexpr T const& front()  const noexcept { assume_assert(size_each not_eq 0); return launder_castT(begins[mapped_idx<T>])[0]; }
-  template <class T> eden_always_inline [[nodiscard]] constexpr T&       back()         noexcept { assume_assert(size_each not_eq 0); return launder_castT(begins[mapped_idx<T>])[size_each-1]; }
-  template <class T> eden_always_inline [[nodiscard]] constexpr T const& back()   const noexcept { assume_assert(size_each not_eq 0); return launder_castT(begins[mapped_idx<T>])[size_each-1]; }
+  template <class T> eden_always_inline [[nodiscard]] constexpr T&       front()        noexcept { assert(size_each not_eq 0); return launder_castT(begins[mapped_idx<T>])[0]; }
+  template <class T> eden_always_inline [[nodiscard]] constexpr T const& front()  const noexcept { assert(size_each not_eq 0); return launder_castT(begins[mapped_idx<T>])[0]; }
+  template <class T> eden_always_inline [[nodiscard]] constexpr T&       back()         noexcept { assert(size_each not_eq 0); return launder_castT(begins[mapped_idx<T>])[size_each-1]; }
+  template <class T> eden_always_inline [[nodiscard]] constexpr T const& back()   const noexcept { assert(size_each not_eq 0); return launder_castT(begins[mapped_idx<T>])[size_each-1]; }
   template <class T> eden_always_inline [[nodiscard]] constexpr T*       data()         noexcept { return launder_castT(begins[mapped_idx<T>]); }
   template <class T> eden_always_inline [[nodiscard]] constexpr T const* data()   const noexcept { return launder_castT(begins[mapped_idx<T>]); }
 
@@ -191,7 +191,7 @@ public:
 
   template<class T> eden_always_inline constexpr T&
   get(sz_t idx) noexcept {
-    assume_assert(idx < size_each);
+    assert(idx < size_each);
     return launder_castT(begins[ mapped_idx<T> ])[idx];
   }
 

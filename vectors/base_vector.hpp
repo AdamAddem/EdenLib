@@ -188,15 +188,16 @@ protected:
 
   constexpr void destroy_n_backwards(count_t n)
   noexcept(nothrow_destruct) {
+    assert(m_begin); assert(call_derived size() >= n);
     if constexpr (trivially_destructible) {
-      if constexpr(is_small) m_size = 0;
-      else m_size = m_begin;
+      m_size -= n;
       return;
     }
-    assert(m_begin); assert(call_derived size() >= n);
-    while (n-- > 0) {
-      if constexpr (is_small) std::destroy_at(m_begin + --m_size);
-      else std::destroy_at(--m_size);
+    else {
+      while (n-- > 0) {
+        if constexpr (is_small) std::destroy_at(m_begin + --m_size);
+        else std::destroy_at(--m_size);
+      }
     }
   }
 
@@ -427,7 +428,7 @@ public:
   constexpr void swap(base_vector<T, Derived, other_settings, other_allocator>& other) noexcept {
     std::swap(m_alloc, other.m_alloc);
     std::swap(m_begin, other.m_begin); std::swap(m_size, other.m_size);
-    std::swap(m_cap, other.m_cap); std::swap(m_alloc, other.m_alloc);
+    std::swap(m_cap, other.m_cap);
   }
 
   template <base_vector_settings other_settings, allocator_for_c<T> other_allocator>

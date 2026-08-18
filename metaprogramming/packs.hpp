@@ -75,7 +75,7 @@ struct AlignPack {
       auto& alignment_count = alignments_count[i];
       for(j = 0; j<NumTs and alignment_count not_eq 0; ++j) {
         auto const alignment = alignments[j];
-        if( std::bit_width(alignment) == i + 1 ) {
+        if( (sz_t) std::bit_width(alignment) == i + 1 ) {
           --alignment_count;
           map_to_idx[j] = --num;
         }
