@@ -63,10 +63,10 @@ static constexpr const char(&append_number_to_literal)[str_size+22] = append_num
 stpcpy_restrict(char* eden_restrict dest, const char* eden_restrict src) noexcept {
   assert(dest); assert(src);
   while (true) {
-    *dest = *src;
-    ++dest; ++src;
-    if (*src == '\0')
-      break;
+    char const c = *src;
+    *dest = c; ++src;
+    if (c == '\0') break;
+    ++dest;
   }
 
   return dest;
@@ -76,15 +76,14 @@ stpcpy_restrict(char* eden_restrict dest, const char* eden_restrict src) noexcep
 // returns a pointer to the end of the destination string
 // assumes neither ptr is null
 [[nodiscard]] constexpr char*
-stpcpy(char* dest, const char* src) noexcept {
+stpcpy(char* dest, char const* src) noexcept {
   assert(dest); assert(src);
   while (true) {
-    *dest = *src;
-    ++dest; ++src;
-    if (*src == '\0')
-      break;
+    char const c = *src;
+    *dest = c; ++src;
+    if (c == '\0') break;
+    ++dest;
   }
-
   return dest;
 }
 

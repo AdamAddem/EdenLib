@@ -48,7 +48,7 @@
 
 #if defined(__has_builtin)
   #if __has_builtin(__builtin_is_cpp_trivially_relocatable)
-    #define eden_trivially_relocatable(T) __is_trivially_relocatable(T)
+    #define eden_trivially_relocatable(T) __builtin_is_cpp_trivially_relocatable(T)
   #elif __has_builtin(__is_trivially_relocatable)
     #define eden_trivially_relocatable(T) __is_trivially_relocatable(T)
   #endif

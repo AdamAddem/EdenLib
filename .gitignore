@@ -1,2 +1,3 @@
-tests.cpp
 CMakeLists.txt
+compile_flags.txt
+tests/

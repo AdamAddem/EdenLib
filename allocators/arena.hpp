@@ -1,5 +1,6 @@
 #pragma once
 #include "basic_allocator.hpp"
+#include <vector>
 
 namespace eden {
 // Exclusive dictates whether the owner of the arena has exclusive ownership over the data
@@ -22,7 +23,9 @@ public:
 
   eden_always_inline Arena() noexcept : end(std::start_lifetime_as_array<byte_t>((byte_t*)::operator new(NBytes, ArenaAlignment), NBytes)), remaining(NBytes) {}
   eden_always_inline Arena(Arena&& other) noexcept : end(other.end), remaining(other.remaining) { other.end = invalid_end; other.remaining = 0; }
-  eden_always_inline ~Arena() { end not_eq invalid_end ? ::operator delete( end - (NBytes - remaining), ArenaAlignment ) : (void)0; }
+  eden_always_inline ~Arena() { 
+    if(end not_eq invalid_end) ::operator delete( end - (NBytes - remaining), ArenaAlignment );
+  }
 
   // second parameter is not used and will always align to alignof(T)
   template <class T = byte_t>
@@ -65,7 +68,7 @@ public:
   [[nodiscard]] constexpr T*
   reallocate(T* old_buff, sz_t old_count, sz_t new_count, align_t = {}) noexcept {
     if( (byte_t*)(old_buff + old_count) not_eq end )
-      return allocate(new_count);
+      return allocate<T>(new_count);
 
     auto const old_allocation_bytes = old_count * sizeof(T);
     auto const new_allocation_bytes = new_count * sizeof(T);

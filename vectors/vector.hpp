@@ -10,7 +10,11 @@ struct vector_settings { static constexpr base_vector_settings<Small, ExpansionM
 
 // Mostly standard vector implementation
 template <class T, auto settings = vector_settings{}, allocator_for_c<T> Allocator = BasicAllocator<T>>
-class vector : public base_vector<T, vector<T, settings, Allocator>, settings.base_settings, Allocator> {};
+class vector : public base_vector<T, vector<T, settings, Allocator>, settings.base_settings, Allocator> {
+  using base = base_vector<T, vector<T, settings, Allocator>, settings.base_settings, Allocator>;
+public:
+  using base::base;
+};
 
 template <class T>
 using vector16 = vector<T, vector_settings<true>{}>;

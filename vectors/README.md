@@ -1,18 +1,6 @@
 ### Note:
 The vector implementations within this library do not have any exception safety guarantees. <br>
-As such, most methods are marked noexcept conditional on the exception behavior of the value_type and or allocator in that scenario. <br>
-Expansion still relies on std::move_if_noexcept. <br>
-Each implementation has the same API as std::vector, with some additions listed below: 
-```cpp
-    template <sz_t N> 
-    constexpr explicit (flags::ReserveInitial<N>)  // pass in a flags::reserve_initial<N> instance 
-    noexcept(nothrow_allocating); 
-    
-    constexpr explicit operator std::span<T>() noexcept;
-    constexpr std::span<T> to_span() noexcept;
-    constexpr explicit operator std::span<const T>() const noexcept;
-    constexpr std::span<const T> to_span() const noexcept;
-```
+As such, most methods are marked noexcept regardless if an element could throw an exception. <br>
 
 ### Vector 'Settings'
 (Most) Vector implementations within this library each have custom settings, allowing you to specify some generic properties (expansion multiplier), 

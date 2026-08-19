@@ -12,7 +12,8 @@ namespace eden {
   class LifetimeObserver : type<LifetimeObserver<N>, append_number_to_literal<N, "LifetimeObserver">> {
     inline static constinit std::vector<std::string> lifetime_log;
     inline static constinit sz_t idgen{1};
-    inline static constinit const char* name_ = LifetimeObserver::name;
+
+    inline static constinit auto name_ = LifetimeObserver::name;
     sz_t id;
   public:
 

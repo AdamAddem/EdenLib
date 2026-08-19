@@ -10,6 +10,7 @@
 
 namespace eden {
 
+#define comma(...) __VA_ARGS__
 
 template<class First, class... Rest> struct type_list;
 template<auto First, auto... Rest> struct nontype_list;
@@ -21,7 +22,10 @@ struct type {
   static consteval auto type_instance() {return type{};}
 
   constexpr type() noexcept = default;
-  constexpr type(const T&) noexcept {}
+
+  template <class X = T>
+  requires (std::is_same_v<X, T> and not std::is_void_v<T>)
+  constexpr type(T const&) noexcept {}
 
   template <class OtherType>
   consteval type_list<Type, OtherType>
@@ -94,9 +98,9 @@ struct type {
   va_template_trait(Args, constructible_with, comma(std::is_constructible_v<T, Args...>))
   va_template_trait(Args, trivially_constructible_with , comma(std::is_trivially_constructible_v<T, Args...>))
   va_template_trait(Args, nothrow_constructible_with , comma(std::is_nothrow_constructible_v<T, Args...>))
-  va_template_trait(Args, assignable_with , comma(std::is_assignable_v<T, Args...>))
-  va_template_trait(Args, trivially_assignable_with , comma(std::is_trivially_assignable_v<T, Args...>))
-  va_template_trait(Args, nothrow_assignable_with , comma(std::is_nothrow_assignable_v<T, Args...>))
+  template_trait(U, assignable_with , comma(std::is_assignable_v<T, U>))
+  template_trait(U, trivially_assignable_with , comma(std::is_trivially_assignable_v<T, U>))
+  template_trait(U, nothrow_assignable_with , comma(std::is_nothrow_assignable_v<T, U>))
 
   trait(default_constructible,  std::is_default_constructible_v<T>)
   trait(trivially_default_constructible,  std::is_trivially_default_constructible_v<T>)
@@ -289,12 +293,12 @@ struct nontype_list {
   template<auto... Others>
   [[nodiscard]] static consteval auto
   append(nontype_list<Others...>) noexcept
-  { return nontype_list<First, Others...>{}; }
+  { return nontype_list<First, Rest..., Others...>{}; }
 
   template<auto Other>
   [[nodiscard]] static consteval auto
   append() noexcept
-  { return nontype_list<First, Other>{}; }
+  { return nontype_list<First, Rest..., Other>{}; }
 
   template<sz_t idx>
   requires (idx < length)

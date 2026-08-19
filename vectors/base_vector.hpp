@@ -26,7 +26,7 @@ struct base_vector_settings {
   static constexpr bool is_small = sizeof(void*) >= 8 ? Small : false;
 };
 
-/* Note that there is zero exception safety, and copy constructor/assignment are unimplemented currently. */
+/* Note that there is zero exception safety */
 template <class T, class Derived, base_vector_settings settings = base_vector_settings{}, allocator_for_c<T> Allocator = BasicAllocator<T>>
 requires (move_constructible_c<T> or copy_constructible_c<T>) and std::is_move_constructible_v<Allocator>
 class base_vector {
@@ -39,14 +39,8 @@ protected:
   static constexpr bool default_constructible = std::is_default_constructible_v<T>;
   static constexpr bool copy_constructible = std::is_copy_constructible_v<T>;
   static constexpr bool move_constructible = std::is_move_constructible_v<T>;
-  static constexpr bool nothrow_default_constructible = std::is_nothrow_default_constructible_v<T>;
-  static constexpr bool nothrow_move_construct = std::is_nothrow_move_constructible_v<T>;
-  static constexpr bool nothrow_copy_construct = std::is_nothrow_copy_constructible_v<T>;
 
   [[no_unique_address]] Allocator m_alloc;
-  static constexpr bool nothrow_destruct = std::is_nothrow_destructible_v<T>;
-  static constexpr bool nothrow_allocating = noexcept(m_alloc.allocate(1));
-  static constexpr bool nothrow_deallocating = noexcept(m_alloc.deallocate(static_cast<T*>(nullptr), 1));
 
   T* m_begin{};
   std::conditional_t<is_small, u32_t, T*> m_size{};
@@ -54,16 +48,15 @@ protected:
 #define call_derived static_cast<Derived*>(this)->
 #define call_derived_const static_cast<const Derived*>(this)->
 
-  eden_always_inline constexpr void zero_members() noexcept {
+  eden_always_inline constexpr void 
+  zero_members() noexcept {
     if constexpr (is_small) m_begin = nullptr, m_size = 0, m_cap = 0;
     else m_cap = m_size = m_begin = nullptr;
   }
 
   using count_t = std::conditional_t<is_small, u32_t, sz_t>;
 
-  constexpr void
-  allocate_from_empty(count_t count)
-  noexcept(nothrow_allocating) {
+  constexpr void allocate_from_empty(count_t count) noexcept {
     if constexpr (is_small) {
       assert(m_begin == nullptr);
       assert(m_size == 0);
@@ -80,15 +73,13 @@ protected:
     }
   }
 
-  constexpr void deallocate()
-  noexcept(nothrow_deallocating) {
+  constexpr void deallocate() noexcept {
     if (m_begin == nullptr) return;
     m_alloc.deallocate(m_begin,  call_derived capacity());
     call_derived zero_members();
   }
 
-  constexpr void destroy()
-  noexcept(nothrow_destruct) {
+  constexpr void destroy() noexcept {
     if constexpr(trivially_destructible) {
       if constexpr(is_small) m_size = 0;
       else m_size = m_begin;
@@ -106,8 +97,7 @@ protected:
 
   template <class ...Args>
   constexpr T&
-  emplace_back_unchecked(Args&&... args)
-  noexcept(std::is_nothrow_constructible_v<T, Args...>) {
+  emplace_back_unchecked(Args&&... args) noexcept {
     assert(m_begin); assert(m_size not_eq m_cap);
     if constexpr (is_small) {
       auto const obj_location = m_begin + m_size;
@@ -123,16 +113,31 @@ protected:
 
   template <class ...Args>
   constexpr T&
-  grow_and_emplace(Args&&... args)
-  noexcept(std::is_nothrow_constructible_v<T, Args...>) {
-    if (m_begin == nullptr) call_derived allocate_from_empty(first_allocation_size);
-    else call_derived expand_to(call_derived capacity() * expansion_mult);
+  grow_and_emplace(Args&&... args) noexcept {
+    if (m_begin == nullptr) {
+      call_derived allocate_from_empty(first_allocation_size);
+      return call_derived emplace_back_unchecked(std::forward<Args>(args)...);
+    }
+
+    // args may alias this vector's buffer, so we do this funny stuff
+    auto const count = call_derived capacity() * expansion_mult;
+    auto const sz = call_derived size(); assert(count >= sz);
+    
+    T* new_buff = m_alloc.allocate(count);
+    std::construct_at(new_buff + sz, std::forward<Args>(args)...);
+    relocate_to(new_buff);
+    call_derived destroy();
+    call_derived deallocate();
+    m_begin = new_buff;
+    
+    if constexpr (is_small) { m_size = sz; m_cap = count; }
+    else { m_size = m_begin + sz; m_cap = m_begin + count; }
+    
     return call_derived emplace_back_unchecked(std::forward<Args>(args)...);
   }
 
   template <class ...Args>
-  constexpr void allocate_and_construct(count_t count, Args&&... args)
-  noexcept(nothrow_constructible_with_c<T, Args...>)
+  constexpr void allocate_and_construct(count_t count, Args&&... args) noexcept 
   requires constructible_with_c<T, Args...> {
     call_derived allocate_from_empty(count);
     if constexpr(sizeof...(Args) == 0 and std::is_trivially_default_constructible_v<T>) {
@@ -155,39 +160,38 @@ protected:
     }
   }
 
-  constexpr void
-  expand_to(count_t count)
-  noexcept(nothrow_move_construct or nothrow_copy_construct) {
-    assert(count >= call_derived size());
-    T* new_buff = m_alloc.allocate(count);
-
-    if constexpr(is_small) {
-      if (count < m_cap) {
-        eden_unreachable("It seems like a small eden::vector overflowed.");
-      }
-    }
-
-    auto const sz = call_derived size();
+  // just relocates items, does not destroy or deallocate
+  static constexpr void relocate_from_to(T* to, T* from, sz_t amount) {
     if constexpr(eden_trivially_relocatable(T)) {
-      std::memcpy(new_buff, m_begin, sz * sizeof(T));
+      std::memcpy(to, from, amount * sizeof(T));
     }
     else {
       auto i{0uz};
-      while (i not_eq sz) {
-        std::construct_at(new_buff + i, std::move_if_noexcept(m_begin[i]));
+      while (i not_eq amount) {
+        std::construct_at(to + i, std::move_if_noexcept( from[i]) );
         ++i;
       }
-      call_derived destroy();
     }
+  }
+  
+  constexpr void expand_to(count_t new_cap) noexcept {
+    if constexpr(is_small) {
+      if (new_cap < m_cap) { eden_unreachable("It seems like a small eden::vector overflowed."); }
+    }
+    
+    auto const sz = call_derived size(); assert(new_cap >= call_derived capacity());
+    T* new_buff = m_alloc.allocate(new_cap);
+    
+    relocate_to(new_buff);
+    call_derived destroy();
     call_derived deallocate();
     m_begin = new_buff;
-
-    if constexpr (is_small) { m_size = sz; m_cap = count; }
-    else { m_size = m_begin + sz; m_cap = m_begin + count; }
+    
+    if constexpr (is_small) { m_size = sz; m_cap = new_cap; }
+    else { m_size = m_begin + sz; m_cap = m_begin + new_cap; }
   }
 
-  constexpr void destroy_n_backwards(count_t n)
-  noexcept(nothrow_destruct) {
+  constexpr void destroy_n_backwards(count_t n) noexcept {
     assert(m_begin); assert(call_derived size() >= n);
     if constexpr (trivially_destructible) {
       m_size -= n;
@@ -201,8 +205,8 @@ protected:
     }
   }
 
-  eden_always_inline constexpr ~base_vector()
-  noexcept(nothrow_destruct) {
+  eden_always_inline constexpr 
+  ~base_vector() noexcept {
     if (m_begin == nullptr) return;
     call_derived destroy(); call_derived deallocate();
   }
@@ -225,15 +229,15 @@ public:
       return *this;
     }
 
-    [[nodiscard]] constexpr T*
+    [[nodiscard]] constexpr T const*
     operator->() const noexcept
     {return m_ptr;}
 
-    [[nodiscard]] constexpr T&
+    [[nodiscard]] constexpr T const&
     operator*() const noexcept
     {return *m_ptr;}
 
-    [[nodiscard]] constexpr T&
+    [[nodiscard]] constexpr T const&
     operator[](count_t idx) const noexcept
     {return m_ptr[idx];}
 
@@ -267,15 +271,15 @@ public:
 
     [[nodiscard]] friend constexpr const_iterator
     operator+(const_iterator lhs, count_t n) noexcept
-    {return iterator(lhs.m_ptr + n);}
+    {return const_iterator(lhs.m_ptr + n);}
 
     [[nodiscard]] friend constexpr const_iterator
     operator+(count_t n, const_iterator rhs) noexcept
-    {return iterator(rhs.m_ptr + n);}
+    {return const_iterator(rhs.m_ptr + n);}
 
     [[nodiscard]] friend constexpr const_iterator
     operator-(const_iterator lhs, count_t n) noexcept
-    {return iterator(lhs.m_ptr - n);}
+    {return const_iterator(lhs.m_ptr - n);}
 
     [[nodiscard]] friend constexpr bool
     operator==(const const_iterator& a, const const_iterator& b) noexcept = default;
@@ -371,32 +375,31 @@ public:
   using const_reverse_iterator = std::reverse_iterator<const_iterator>;
   using reverse_iterator = std::reverse_iterator<iterator>;
 
-  eden_always_inline constexpr base_vector() noexcept(std::is_nothrow_default_constructible_v<Allocator>) = default;
+  eden_always_inline constexpr base_vector() noexcept = default;
 
   template <count_t N>
   eden_always_inline constexpr explicit
-  base_vector(flags::ReserveInitial<N>)
-  noexcept(nothrow_allocating)
+  base_vector(flags::ReserveInitial<N>) noexcept
   { call_derived allocate_from_empty(N); }
 
-  eden_always_inline constexpr explicit base_vector(Allocator const& alloc) noexcept(std::is_nothrow_copy_constructible_v<Allocator>) : m_alloc(alloc) {}
+  eden_always_inline constexpr explicit base_vector(Allocator const& alloc) noexcept : m_alloc(alloc) {}
 
   constexpr explicit
-  base_vector(count_t count, Allocator const& alloc = Allocator())
-  noexcept(noexcept(allocate_and_construct(count)))
+  base_vector(count_t count, Allocator const& alloc = Allocator()) noexcept
   requires default_constructible
   : m_alloc(alloc)
   { call_derived allocate_and_construct(count); }
 
-  constexpr base_vector(count_t count, T const& value, Allocator const& alloc = Allocator())
-  noexcept(nothrow_copy_construct)
+  constexpr base_vector(count_t count, T const& value, Allocator const& alloc = Allocator()) noexcept
   requires copy_constructible
   : m_alloc(alloc)
-  { call_derived allocate_and_construct(count, std::forward<T>(value)); }
+  { call_derived allocate_and_construct(count, value); }
 
+  constexpr base_vector(base_vector const&) noexcept = delete;
+  constexpr base_vector& operator=(base_vector const&) noexcept = delete;
+  
   [[nodiscard]] constexpr Derived
-  copy() const
-  noexcept(nothrow_copy_construct)
+  copy() const noexcept
   requires copy_constructible {
     auto const sz = call_derived_const size();
     Derived res;
@@ -499,10 +502,11 @@ public:
   eden_always_inline [[nodiscard]] constexpr std::span<const T> to_span() const noexcept { return call_derived_const operator std::span<const T>(); }
 
   constexpr void reserve(count_t new_capacity) noexcept {
-    if (m_begin == nullptr)
-       call_derived allocate_from_empty(new_capacity);
-    else if (call_derived capacity() < new_capacity)
-       call_derived expand_to(new_capacity);
+    if(call_derived capacity() >= new_capacity) return;
+    if (m_begin not_eq nullptr)
+      call_derived expand_to(new_capacity);
+    else
+      call_derived allocate_from_empty(new_capacity);
   }
 
   constexpr void resize(count_t count) noexcept
@@ -528,6 +532,7 @@ public:
     if (m_begin == nullptr)
       return call_derived allocate_and_construct(count, value);
 
+    auto value_copy = value; // to avoid the possibility of value being within this vector
     auto const current_size = call_derived size();
     if (current_size >= count)
       return call_derived destroy_n_backwards(current_size - count);
@@ -538,8 +543,8 @@ public:
     const auto num_default{count - call_derived size()};
     count_t i{};
     while (i++ < num_default)
-      if constexpr (is_small) std::construct_at(m_begin + m_size++, value);
-      else std::construct_at(m_size++, value);
+      if constexpr (is_small) std::construct_at(m_begin + m_size++, value_copy);
+      else std::construct_at(m_size++, value_copy);
   }
 
   constexpr void shrink_to_fit() noexcept {
@@ -549,8 +554,7 @@ public:
 
   template <class... Args>
   constexpr T&
-  emplace_back(Args&&... args)
-  noexcept(std::is_nothrow_constructible_v<T, Args...>)
+  emplace_back(Args&&... args) noexcept
   requires std::is_constructible_v<T, Args...> {
     if (m_size == m_cap) [[unlikely]]
       return call_derived grow_and_emplace(std::forward<Args>(args)...);
@@ -558,23 +562,26 @@ public:
   }
 
   eden_always_inline constexpr void
-  push_back(T const& value)
-  noexcept(nothrow_copy_construct)
+  push_back(T const& value) noexcept
   requires copy_constructible
   { call_derived emplace_back(value); }
 
   eden_always_inline constexpr void
-  push_back(T&& value)
-  noexcept(nothrow_move_construct)
+  push_back(T&& value) noexcept
   requires move_constructible
   { call_derived emplace_back(std::move(value)); }
 
   eden_always_inline constexpr void
-  pop_back()
-  noexcept(nothrow_destruct) {
-    assert(m_begin); assert(m_size not_eq m_begin);
-    if constexpr(is_small) std::destroy_at(m_begin + --m_size);
-    else std::destroy_at(--m_size);
+  pop_back() noexcept {
+    assert(m_begin);
+    if constexpr(is_small) {
+      assert(m_size not_eq 0);
+      std::destroy_at(m_begin + --m_size);
+    }
+    else {
+      assert(m_size not_eq m_begin);
+      std::destroy_at(--m_size);
+    }
   }
 };
 

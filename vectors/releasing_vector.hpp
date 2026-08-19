@@ -31,25 +31,25 @@ struct releasing_vector_settings {
 };
 
 template <class T, auto settings = releasing_vector_settings{}, allocator_for_c<T> Allocator = BasicAllocator<T>>
-requires (settings.is_string ? (sizeof(T) == 1 and type<T>::is_integral) : true)
+requires (settings.is_string ? (sizeof(T) == 1 and std::is_integral_v<T>) : true)
 class releasing_vector : public base_vector<T, releasing_vector<T, settings, Allocator>, settings.base_settings, Allocator>  {
-
+  
+  template < class O, auto other_settings, allocator_for_c<O> >
+  requires (other_settings.is_string ? (sizeof(O) == 1 and std::is_integral_v<O>) : true)
+  friend class releasing_vector;
+  
   using base = base_vector<T, releasing_vector, settings.base_settings, Allocator>;
   friend class base_vector<T, releasing_vector, settings.base_settings, Allocator>;
+  
   using base::m_begin; using base::m_size; using base::m_cap; using base::m_alloc;
   using base::copy_constructible;
-  using base::nothrow_allocating;
-  using base::nothrow_deallocating;
-  using base::nothrow_move_construct;
-  using base::nothrow_copy_construct;
-  using base::nothrow_destruct;
   using base::trivially_destructible;
 
-  static constexpr bool is_string = settings.is_string;
+  public: static constexpr bool is_string = settings.is_string; private:
   static constexpr bool store_size_and_capacity = settings.store_size_and_capacity;
   static_assert(store_size_and_capacity ? true : trivially_destructible, "Not storing size and capacity is only possible if the type is trivially destructible.");
 
-  static constexpr bool has_header = not Allocator::stateless or store_size_and_capacity;
+  static constexpr bool has_header = (not Allocator::stateless) or (store_size_and_capacity);
 
   struct header_sz_cap {
     [[no_unique_address]] Allocator alloc;
@@ -79,16 +79,13 @@ class releasing_vector : public base_vector<T, releasing_vector<T, settings, All
   eden_always_inline void
   construct_header() const noexcept
   requires has_header {
-    new (header_ptr())
-    header(
-      std::move(m_alloc),
-      this->size(),
-      this->capacity());
+    if constexpr(store_size_and_capacity)
+      new (header_ptr()) header( std::move(m_alloc), this->size(), this->capacity() );     
+    else
+      new (header_ptr()) header( std::move(m_alloc) );
   }
 
-  constexpr void
-  allocate_from_empty(sz_t count)
-  noexcept(base::nothrow_allocating) {
+  constexpr void allocate_from_empty(sz_t count) noexcept {
     assert(m_begin == nullptr);
     assert(m_size == nullptr);
     assert(m_cap == nullptr);
@@ -104,16 +101,13 @@ class releasing_vector : public base_vector<T, releasing_vector<T, settings, All
 #endif
   }
 
-  constexpr void deallocate()
-  noexcept(base::nothrow_deallocating) {
+  constexpr void deallocate() noexcept {
     if (m_begin == nullptr) return;
     m_alloc.deallocate(m_begin - header_offset,  this->capacity() + header_offset);
     m_cap = m_size = m_begin = nullptr;
   }
 
-  constexpr void
-  expand_to(sz_t count)
-  noexcept(base::nothrow_move_construct or base::nothrow_copy_construct) {
+  constexpr void expand_to(sz_t count) noexcept {
     assert(count >= this->size());
     T* new_buff = m_alloc.allocate(count + header_offset) + header_offset;
 
@@ -143,7 +137,16 @@ public:
   struct released_ptr : owned_ptr<T[]> {
     eden_always_inline constexpr released_ptr() noexcept = default;
     eden_always_inline constexpr explicit released_ptr(T* previously_released_data) noexcept : owned_ptr<T[]>(std::move(previously_released_data)) {}
-    eden_always_inline constexpr void destroy_and_deallocate() noexcept(nothrow_deallocating and nothrow_destruct) { releasing_vector::destroy_and_deallocate(std::move(*this)); }
+    
+    eden_always_inline constexpr void 
+    destroy_and_deallocate() noexcept
+    requires has_header
+    { releasing_vector::destroy_and_deallocate(std::move(*this)); }
+
+    eden_always_inline constexpr void 
+    destroy_and_deallocate(sz_t count) noexcept
+    requires (not has_header)
+    { releasing_vector::destroy_and_deallocate(std::move(*this), count); }
 
     // note that this method is more expensive than a typical size() call
     eden_always_inline [[nodiscard]] constexpr sz_t size() const noexcept requires store_size_and_capacity { return releasing_vector::data_size(*this); }
@@ -154,21 +157,19 @@ public:
     eden_always_inline constexpr released_span(released_ptr previously_released_data, sz_t sz) noexcept : owned_span<T>(std::move(previously_released_data), sz) {}
     eden_always_inline constexpr released_span(released_ptr&& cstr) noexcept requires is_string : owned_span<T>(std::move(cstr)){}
 
-    eden_always_inline constexpr void destroy_and_deallocate() noexcept(nothrow_deallocating and nothrow_destruct) { releasing_vector::destroy_and_deallocate(std::move(*this)); }
+    eden_always_inline constexpr void destroy_and_deallocate() noexcept { releasing_vector::destroy_and_deallocate(std::move(*this)); }
   };
 
-  eden_always_inline constexpr releasing_vector() noexcept(std::is_nothrow_default_constructible_v<Allocator>) = default;
-  eden_always_inline constexpr explicit releasing_vector(released_span released_data) noexcept(base::nothrow_move_construct) : releasing_vector(released_ptr(released_data.release())) {}
+  eden_always_inline constexpr releasing_vector() noexcept = default;
+  eden_always_inline constexpr explicit releasing_vector(released_span released_data) noexcept : releasing_vector(released_ptr(released_data.release())) {}
 
-  template <sz_t N> eden_always_inline constexpr explicit releasing_vector(flags::ReserveInitial<N>) noexcept(nothrow_allocating) { allocate_from_empty(N); }
+  template <sz_t N> eden_always_inline constexpr explicit releasing_vector(flags::ReserveInitial<N>) noexcept { allocate_from_empty(N); }
 
   constexpr explicit
-  releasing_vector(released_ptr released_data)
-  noexcept(base::nothrow_move_construct)
+  releasing_vector(released_ptr released_data) noexcept
   requires store_size_and_capacity {
-    assert(m_begin not_eq nullptr);
-    m_begin = released_data.release();
-    auto h = get_header_pointer_from(m_begin);
+    m_begin = released_data.release(); assert(m_begin not_eq nullptr);
+    auto h = get_header_from(m_begin);
     m_alloc = std::move(h->alloc);
 
     m_size = m_begin + h->size;
@@ -178,10 +179,13 @@ public:
     std::destroy_at(h);
   }
 
+  eden_always_inline constexpr explicit
+  releasing_vector(Allocator const& alloc) noexcept
+  : base(alloc) {}
+  
   template <sz_t N>
   explicit
-  releasing_vector(const char(&c_str)[N])
-  noexcept(base::nothrow_allocating)
+  releasing_vector(const char(&c_str)[N]) noexcept
   requires is_string {
     allocate_from_empty(N);
     std::copy_n(c_str, N - 1, m_begin);
@@ -199,8 +203,7 @@ public:
   constexpr releasing_vector(releasing_vector const&) = delete;
   constexpr releasing_vector& operator=(releasing_vector const&) = delete;
 
-  eden_always_inline constexpr ~releasing_vector()
-  noexcept(base::nothrow_destruct) {
+  eden_always_inline constexpr ~releasing_vector() noexcept {
     if (m_begin == nullptr) return;
     this->destroy(); deallocate();
   }
@@ -247,8 +250,7 @@ public:
   eden_always_inline [[nodiscard]] constexpr released_span release_span() noexcept { auto sz = this->size(); return released_span(release(), sz); }
 
   static constexpr void
-  destroy_and_deallocate(released_ptr data)
-  noexcept(base::nothrow_deallocating and base::nothrow_destruct)
+  destroy_and_deallocate(released_ptr data) noexcept
   requires store_size_and_capacity {
     if (data == nullptr) return;
 
@@ -265,29 +267,26 @@ public:
   }
 
   static constexpr void
-  destroy_and_deallocate(released_ptr data)
-  noexcept(base::nothrow_deallocating and base::nothrow_destruct)
+  destroy_and_deallocate(released_ptr data) noexcept
   requires (not store_size_and_capacity and has_header) {
     if (data == nullptr) return;
 
     auto const header_ptr = get_header_from(data.get());
-    auto const alloc = std::move(header_ptr->alloc);
-    auto const cap = header_ptr->capacity;
+    auto alloc = std::move(header_ptr->alloc);
     std::destroy_at(header_ptr);
-    alloc.deallocate(data.get() - header_offset, cap + header_offset);
+    alloc.deallocate(data.get() - header_offset);
   }
 
-  eden_always_inline static constexpr void destroy_and_deallocate(released_ptr data, sz_t count) noexcept(base::nothrow_deallocating) requires (not has_header) { Allocator{}.deallocate(data.get(), count); }
-  eden_always_inline static constexpr void destroy_and_deallocate(released_span data) noexcept(base::nothrow_deallocating) requires (not has_header) { Allocator{}.deallocate(data.get(), data.size()); }
-  eden_always_inline static constexpr void destroy_and_deallocate(released_span data) noexcept(base::nothrow_deallocating and base::nothrow_destruct) { return destroy_and_deallocate(released_ptr(data.get())); }
+  eden_always_inline static constexpr void destroy_and_deallocate(released_ptr data, sz_t count) noexcept requires (not has_header) { Allocator{}.deallocate(data.get(), count); }
+  eden_always_inline static constexpr void destroy_and_deallocate(released_span data) noexcept requires (not has_header) { Allocator{}.deallocate(data.get(), data.size()); }
+  eden_always_inline static constexpr void destroy_and_deallocate(released_span data) noexcept { return destroy_and_deallocate(released_ptr(data.get())); }
 
   static constexpr released_ptr
-  copy_data(released_ptr const& data)
-  noexcept(base::nothrow_deallocating and base::nothrow_destruct)
+  copy_data(released_ptr const& data) noexcept
   requires (base::copy_constructible and store_size_and_capacity) {
     if (data == nullptr) return released_ptr(nullptr);
 
-    auto header_ptr = get_header_from( (T*)data.get() );
+    auto header_ptr = get_header_from( (T*) data.get() );
     auto const size = header_ptr->size;
     releasing_vector v(header_ptr->alloc);
     v.reserve(size);
@@ -345,6 +344,7 @@ public:
 
 };
 
-using releasing_string = releasing_vector<char, releasing_vector_settings<true>{}>;
+using releasing_string = releasing_vector< char, releasing_vector_settings<true, true>{} >;
+static_assert(releasing_string::is_string);
 
 }

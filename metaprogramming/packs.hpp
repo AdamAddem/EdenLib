@@ -3,7 +3,7 @@
 #include "concepts.hpp"
 #include "../macros.hpp"
 
-namespace eden {
+namespace eden::packs {
 
 
 namespace detail {
@@ -12,6 +12,15 @@ template <class T, class First, class... Rest>
 static consteval sz_t idx_in_pack_impl() {
   if constexpr(same_c<T, First>) return 0;
   else return idx_in_pack_impl<T, Rest...>() + 1;
+}
+
+template <class T>
+struct Fake { using type = T; };
+
+template<sz_t IDX, class First, class... Rest>
+static consteval auto type_at_idx_impl() {
+  if constexpr(IDX == 0) return Fake<First>{};
+  else return type_at_idx_impl<IDX - 1, Rest...>();
 }
 
 template <class... Ts> struct max_align_in_pack_impl{ alignas(Ts...) char x; };
@@ -32,6 +41,9 @@ static consteval void fill_with_type_alignments(sz_t* alignment_arr) {
 
 template <class T, class... Ts> static constexpr sz_t idx_in_pack = detail::idx_in_pack_impl<T, Ts...>();
 template <class... Ts> static constexpr sz_t max_align_in_pack = alignof(detail::max_align_in_pack_impl<Ts...>);
+
+template <sz_t IDX, class... Ts>
+using type_at_idx = decltype(detail::type_at_idx_impl<IDX, Ts...>())::type;
 
 template <class... Ts>
 struct SizePack {
@@ -88,9 +100,6 @@ struct AlignPack {
   sz_t operator[](sz_t idx) const noexcept
   { return alignments[idx]; }
 };
-
-
-
 
 
 

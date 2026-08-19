@@ -3,9 +3,7 @@
 #include "../metaprogramming/concepts.hpp"
 #include "../typedefs.hpp"
 
-#include <memory>
 #include <new>
-#include <vector>
 
 namespace eden {
 
@@ -72,12 +70,8 @@ struct BasicAllocator {
   { ::operator delete[](allocated, allocated_count * sizeof(T), allocated_alignment); }
 
   eden_always_inline static void
-  deallocate_raw(void* bytes) noexcept
-  { ::operator delete[](bytes); }
-
-  eden_always_inline static void
-  deallocate_raw(void* bytes, sz_t byte_count) noexcept
-  { ::operator delete[](bytes, byte_count); }
+  deallocate_raw(void* bytes, align_t byte_alignment) noexcept
+  { ::operator delete[](bytes, byte_alignment); }
 
   eden_always_inline static void
   deallocate_raw(void* bytes, sz_t byte_count, align_t byte_alignment) noexcept

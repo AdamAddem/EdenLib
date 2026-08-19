@@ -1,5 +1,5 @@
 #pragma once
-#include "arena.hpp"
+#include "allocators/arena.hpp"
 #include "enum_utils.hpp"
 #include "lifetime_observer.hpp"
 #include "macros.hpp"

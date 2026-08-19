@@ -19,8 +19,15 @@ class owned_ptr {
 
   static constexpr bool is_array = std::is_array_v<T>;
   static constexpr bool bounded_array = std::is_bounded_array_v<T>;
-  static constexpr sz_t array_size = std::extent_v<T, std::rank_v<T> - 1>;
-  static constexpr bool elements_comparable = is_array and requires (value_type a, value_type b) { a == b; };
+
+  static consteval sz_t get_array_size() {
+    if constexpr(bounded_array)
+      return std::extent_v<T, std::rank_v<T> - 1>;
+    else
+      return 0;
+  }
+  static constexpr sz_t array_size = get_array_size();
+  static constexpr bool elements_comparable = is_array and requires (value_type a, value_type b) { {a == b} -> convertible_to_c<bool>; };
   static constexpr bool is_string = std::is_same_v<value_type, char> and is_array;
 
   ptr internal{nullptr};
@@ -49,26 +56,31 @@ public:
   eden_always_inline [[nodiscard]] constexpr bool      operator==(std::nullptr_t) const noexcept                    { return internal == nullptr; }
   eden_always_inline [[nodiscard]] constexpr ref       operator[](sz_t idx)             noexcept requires is_array  { return internal[idx]; }
   eden_always_inline [[nodiscard]] constexpr const_ref operator[](sz_t idx)       const noexcept requires is_array  { return internal[idx]; }
-  eden_always_inline [[nodiscard]] constexpr operator std::string_view()          const noexcept requires is_string { if constexpr (bounded_array) return std::string_view(internal, array_size); else return std::string_view(internal); }
+  eden_always_inline [[nodiscard]] constexpr operator std::string_view()          const noexcept requires is_string { if constexpr (bounded_array) return std::string_view(internal, array_size - 1); else return std::string_view(internal); }
   eden_always_inline               constexpr explicit  operator bool()            const noexcept                    { return internal not_eq nullptr; }
 
 
-  eden_always_inline [[nodiscard]] constexpr explicit operator std::span<value_type, array_size>()      noexcept requires bounded_array { return std::span<value_type, array_size>(internal); }
+  eden_always_inline [[nodiscard]] constexpr explicit operator std::span<value_type, array_size>()      noexcept requires bounded_array { return std::span<value_type, array_size>(internal, array_size); }
   eden_always_inline [[nodiscard]] constexpr std::span<value_type> to_dynamic_span(sz_t length)   const noexcept requires is_array { return std::span(internal, length); }
 
   [[nodiscard]] constexpr bool
-  operator==(const owned_ptr& other) const noexcept {
+  operator==(owned_ptr const& other) const noexcept {
     if constexpr (bounded_array and elements_comparable) {
-      if (internal == other.internal)
-        return true;
+      if (internal == other.internal) return true;
+
+      assert(internal not_eq nullptr);
+      assert(other.internal not_eq nullptr);
       for (auto i{0uz}; i<array_size; ++i) {
         if (internal[i] not_eq other.internal[i])
           return false;
       }
       return true;
     }
-    else if constexpr(is_string)
-      return std::strcmp(internal, other.internal);
+    else if constexpr(is_string) {
+      assert(internal not_eq nullptr);
+      assert(other.internal not_eq nullptr);
+      return std::strcmp(internal, other.internal) == 0;
+    }
     else
       return internal == other.internal;
   }
@@ -76,6 +88,8 @@ public:
   [[nodiscard]] constexpr bool
   operator==(const_ptr other) const noexcept {
     if constexpr (is_string) {
+      assert(internal not_eq nullptr);
+      assert(other not_eq nullptr);
       return streq(internal, other);
     }
     else
@@ -114,6 +128,9 @@ template <class T>     struct ContainsIf<T, true> {T m;};
 template <class T, sz_t Extent = std::dynamic_extent>
 requires (Extent > 0)
 class owned_span {
+  template <class X, sz_t O>
+  friend class owned_span;
+
   static constexpr bool dynamicly_sized = (Extent == std::dynamic_extent);
   static constexpr bool is_string = same_c<T, char>;
   static constexpr bool elements_comparable = requires (T a, T b) { a == b; };
@@ -128,8 +145,8 @@ public:
     using value_type        = std::remove_cv_t<T>;
     using element_type      = value_type;
 
-    const_iterator() : m_ptr(nullptr) {}
-    explicit const_iterator(T* ptr) : m_ptr(ptr) {}
+    constexpr const_iterator() : m_ptr(nullptr) {}
+    explicit constexpr const_iterator(T* ptr) : m_ptr(ptr) {}
 
     constexpr const_iterator&
     operator=(const_iterator other) noexcept {
@@ -137,15 +154,15 @@ public:
       return *this;
     }
 
-    [[nodiscard]] constexpr T*
+    [[nodiscard]] constexpr T const*
     operator->() const noexcept
     {return m_ptr;}
 
-    [[nodiscard]] constexpr T&
+    [[nodiscard]] constexpr T const&
     operator*() const noexcept
     {return *m_ptr;}
 
-    [[nodiscard]] constexpr T&
+    [[nodiscard]] constexpr T const&
     operator[](sz_t idx) const noexcept
     {return m_ptr[idx];}
 
@@ -179,15 +196,15 @@ public:
 
     [[nodiscard]] friend constexpr const_iterator
     operator+(const_iterator lhs, sz_t n) noexcept
-    {return iterator(lhs.m_ptr + n);}
+    {return const_iterator(lhs.m_ptr + n);}
 
     [[nodiscard]] friend constexpr const_iterator
     operator+(sz_t n, const_iterator rhs) noexcept
-    {return iterator(rhs.m_ptr - n);}
+    {return const_iterator(rhs.m_ptr + n);}
 
     [[nodiscard]] friend constexpr const_iterator
     operator-(const_iterator lhs, sz_t n) noexcept
-    {return iterator(lhs.m_ptr - n);}
+    {return const_iterator(lhs.m_ptr - n);}
 
     [[nodiscard]] friend constexpr bool
     operator==(const const_iterator& a, const const_iterator& b) noexcept = default;
@@ -197,15 +214,15 @@ public:
     {return m_ptr <=> other.m_ptr;}
 
   private:
-    T* m_ptr;
+    T const* m_ptr;
   };
   struct iterator {
     using iterator_category = std::contiguous_iterator_tag;
     using value_type        = std::remove_cv_t<T>;
     using element_type      = value_type;
 
-    iterator() : m_ptr(nullptr) {}
-    explicit iterator(T* ptr) : m_ptr(ptr) {}
+    constexpr iterator() : m_ptr(nullptr) {}
+    explicit constexpr iterator(T* ptr) : m_ptr(ptr) {}
 
     constexpr iterator&
     operator=(iterator other) noexcept {
