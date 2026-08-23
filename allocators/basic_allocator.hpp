@@ -15,30 +15,35 @@ struct ContainerPreferences {
 };
 
 template <class Allocator, class T>
-concept allocator_for_c = requires {
-  { std::declval<Allocator>().allocate(1, align_t{2}) } -> same_c<T*>;
+concept allocator_for_c = requires (Allocator a) {
+  { a.allocate(1) } -> same_c<T*>;
+  { a.allocate(1, align_t{2}) } -> same_c<T*>;
 
-  // must be able to deallocate with combinations of size and alignment
-  std::declval<Allocator>().deallocate( (T*)0, sz_t{0});
-  std::declval<Allocator>().deallocate( (T*)0, align_t{2});
-  std::declval<Allocator>().deallocate( (T*)0, sz_t{0}, align_t{2});
+  // must be able to deallocate with these combinations of size and alignment
+  a.deallocate( (T*)0, sz_t{0} );
+  a.deallocate( (T*)0, align_t{2} );
+  a.deallocate( (T*)0, sz_t{0}, align_t{2} );
 
   typename Allocator::value_type;
   Allocator::exclusive_use;           // if true, any container using the allocator has exclusive access to its resources
   Allocator::may_reasonably_fail;     // if true, the allocator may fail for reasons other than rare external factors such as being OOM
-  Allocator::requires_deallocation;   // if false, avoiding deallocation is safe and/or doesn't cause memory leaks (ex, arena)
+  Allocator::requires_deallocation;   // if false, eliding deallocation is acceptable and/or doesn't cause memory leaks (ex: arena)
   Allocator::stateless;
 
   // if true, has 'reallocate' function taking pointer to old buffer and the parameters for a new allocation.
   // if the old buffer satisfies the requirements for the new allocation, just returns pointer to the old buffer.
   // otherwise, returns a pointer to a newly allocated buffer (but does not deallocate the old buffer).
   Allocator::supports_reallocate;
-  Allocator::supports_allocate_raw;   // if true, has 'allocate_raw' function returning byte_t*
+  Allocator::supports_allocate_raw;   // if true, has 'allocate_raw' functions returning byte_t* and 'deallocate_raw' equivalents
 };
 
 template <class Allocator>
-concept raw_allocator_c = allocator_for_c<Allocator, byte_t> and requires {
+concept raw_allocator_c = allocator_for_c<Allocator, byte_t> and 
+requires (Allocator a) {
   requires Allocator::supports_allocate_raw;
+  { a.allocate_raw( 1, align_t{2} ) } -> same_c<byte_t*>;
+  a.deallocate_raw( (byte_t*)0, align_t{2});
+  a.deallocate_raw( (byte_t*)0, sz_t{1}, align_t{2});
 };
 
 template <class T>
@@ -54,23 +59,29 @@ struct BasicAllocator {
   static constexpr auto TAlign = align_t{alignof(T)};
 
   eden_always_inline [[nodiscard]] static T*
-  allocate(sz_t count, align_t alignment = TAlign) noexcept
-  { return std::start_lifetime_as_array<T>( (T*) ::operator new[](count * sizeof(T), alignment), count ); }
+  allocate(sz_t count, align_t alignment = TAlign) noexcept { 
+    assert( alignment >= TAlign );
+    return std::start_lifetime_as_array<T>( (T*) ::operator new[](count * sizeof(T), alignment), count );
+  }
 
   eden_always_inline [[nodiscard]] static byte_t*
   allocate_raw(sz_t byte_count, align_t alignment) noexcept
   { return std::start_lifetime_as_array<byte_t>( (byte_t*) ::operator new[](byte_count, alignment), byte_count); }
 
   eden_always_inline static void
-  deallocate(T* allocated, align_t allocated_alignment = TAlign) noexcept
-  { ::operator delete[](allocated, allocated_alignment); }
+  deallocate(T* allocated, align_t allocated_alignment = TAlign) noexcept {
+    assert( allocated_alignment >= TAlign );
+    ::operator delete[](allocated, allocated_alignment);
+  }
 
   eden_always_inline static void
-  deallocate(T* allocated, sz_t allocated_count, align_t allocated_alignment = TAlign) noexcept
-  { ::operator delete[](allocated, allocated_count * sizeof(T), allocated_alignment); }
+  deallocate(T* allocated, sz_t allocated_count, align_t allocated_alignment = TAlign) noexcept { 
+    assert( allocated_alignment >= TAlign );
+    ::operator delete[](allocated, allocated_count * sizeof(T), allocated_alignment); 
+  }
 
   eden_always_inline static void
-  deallocate_raw(void* bytes, align_t byte_alignment) noexcept
+  deallocate_raw(byte_t* bytes, align_t byte_alignment) noexcept
   { ::operator delete[](bytes, byte_alignment); }
 
   eden_always_inline static void

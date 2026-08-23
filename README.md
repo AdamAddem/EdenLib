@@ -2,34 +2,17 @@
 
 This is a collection of containers, functions, and utilities that i've created for one of many reasons:
 - The standard library doesn't provide a way of doing what I wanted (vectors)
-- The standard library has a limited or annoying implementation of what I wanted (owned)
-- Convenience (assume_assert, typedefs, lifetime_observer, enum_utils)
-- Eh, might as well (arena, macros, null_conditional_chaining, metaprogramming)
+- The standard library has a limited or annoying implementation of what I wanted (owned, allocators)
+- Convenience (typedefs, lifetime_observer, enum_utils)
+- Portability (macros)
+- Fun! (metaprogramming)
 
 The README in the vectors directory provides some information on the vector implementations, 
 when you'd want to use them, and how to leverage base_vector.hpp to easily create your own implementation. <br>
 
 ---
 Here is a quick summary of the smaller headers:
-- arena.hpp: arena + arenapool that stores a growing list of arenas
 - macros.hpp: has macros that generalize some compiler specific features (__restrict, nonnull, etc). If they aren't supported, then the macro is empty.
-- null_conditional_chaining.hpp: macro and template based implementation of a null conditional operator.
-  - ```cpp
-    First* first = getfirst(arg1);
-    Second* second = first->getsecond(arg2);
-    if(second) {
-        Third* third = second->getthird(arg3);
-        if(third) {
-            third->doThing();
-        }
-    } 
-    //can be written as below with the same resulting assembly 
-    call_methods_conditionally(getfirst(arg1),
-                               next_method(First::getsecond, arg2),
-                               next_method(Second::getthird, arg3),
-                               next_method(Third::doThing) );
-    //methods must all return pointers, except last which may return void
-    ```
 - lifetime_observer.hpp
   - Logs all constructions, assignments, and destructions.
   - Can create observer groups by providing group number in template.
@@ -40,7 +23,6 @@ Here is a quick summary of the smaller headers:
   - Shortened type names for common types.
 - enum_utils.hpp
   - Provides enumBetween, a utility allowing for compile or runtime checking of the ordering of enums.
-  - Whether the upper or lower bounds are inclusive or exclusive can be changed (default inclusive for both).
 - string_utils.hpp
   - Provides the TemplateString class, a way of creating and manipulating strings at compile time.
   - Provides stpcpy, a portable version of POSIX's stpcpy.

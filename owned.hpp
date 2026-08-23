@@ -20,13 +20,7 @@ class owned_ptr {
   static constexpr bool is_array = std::is_array_v<T>;
   static constexpr bool bounded_array = std::is_bounded_array_v<T>;
 
-  static consteval sz_t get_array_size() {
-    if constexpr(bounded_array)
-      return std::extent_v<T, std::rank_v<T> - 1>;
-    else
-      return 0;
-  }
-  static constexpr sz_t array_size = get_array_size();
+  static constexpr sz_t array_size = std::extent_v<T, 0>;
   static constexpr bool elements_comparable = is_array and requires (value_type a, value_type b) { {a == b} -> convertible_to_c<bool>; };
   static constexpr bool is_string = std::is_same_v<value_type, char> and is_array;
 
@@ -128,7 +122,8 @@ template <class T>     struct ContainsIf<T, true> {T m;};
 template <class T, sz_t Extent = std::dynamic_extent>
 requires (Extent > 0)
 class owned_span {
-  template <class X, sz_t O>
+  template <class X, sz_t XX>
+  requires (XX > 0)
   friend class owned_span;
 
   static constexpr bool dynamicly_sized = (Extent == std::dynamic_extent);
@@ -398,8 +393,8 @@ public:
   eden_always_inline [[nodiscard]] constexpr T&       operator[](sz_t idx)                      noexcept { return internal[idx]; }
   eden_always_inline [[nodiscard]] constexpr T const& operator[](sz_t idx)                const noexcept { return internal[idx]; }
   eden_always_inline [[nodiscard]] constexpr explicit operator bool()                     const noexcept { return internal not_eq nullptr; }
-  eden_always_inline [[nodiscard]] constexpr operator std::string_view()                  const noexcept requires is_string { return std::string_view(internal, size()); }
-
+  eden_always_inline [[nodiscard]] constexpr explicit operator std::string_view()         const noexcept requires is_string { return std::string_view(internal, size()); }
+  eden_always_inline [[nodiscard]] constexpr std::string_view to_stdstring_view()         const noexcept requires is_string { return std::string_view(internal, size()); }
 
   template <sz_t OtherExtent>
   [[nodiscard]] constexpr bool
@@ -420,12 +415,15 @@ public:
   [[nodiscard]] constexpr bool
   operator==(const char(&c_str)[N]) const noexcept
   requires is_string {
-    if (size() not_eq N)
+    if (size() not_eq N - 1)
       return false;
-    return streq(internal, c_str, N);
+    return to_stdstring_view() == c_str;
   }
 
-  eden_always_inline [[nodiscard]] constexpr bool operator==(const char* c_str) const noexcept requires is_string { return streq(internal, c_str); }
+  eden_always_inline [[nodiscard]] constexpr bool 
+  operator==(char const* c_str) const noexcept 
+  requires is_string 
+  { return to_stdstring_view() == c_str; }
 
 };
 

@@ -31,11 +31,11 @@ public:
   template <class T = byte_t>
   requires (sizeof(T) <= NBytes)
   [[nodiscard]] constexpr T*
-  allocate(sz_t count, align_t = {}) noexcept {
+  allocate(sz_t count, align_t alignment = (align_t)alignof(T)) noexcept {
     auto const alloc_bytes = count * sizeof(T);
 
     void* tmp = end;
-    auto const new_alloc = std::align(alignof(T), alloc_bytes, tmp, remaining);
+    auto const new_alloc = std::align( (sz_t) alignment, alloc_bytes, tmp, remaining);
     end = (byte_t*)tmp;
     if (new_alloc) {
       end = end + alloc_bytes;
@@ -47,18 +47,8 @@ public:
   }
 
   eden_always_inline [[nodiscard]] constexpr byte_t*
-  allocate_raw(sz_t byte_count, align_t alignment) noexcept {
-    void* tmp = end;
-    auto const new_alloc = std::align( (sz_t) alignment, byte_count, tmp, remaining );
-    end = (byte_t*)tmp;
-    if (new_alloc) {
-      end = end + byte_count;
-      remaining -= byte_count;
-      return std::start_lifetime_as_array<byte_t>( (byte_t*) new_alloc, byte_count );
-    }
-
-    return nullptr;
-  }
+  allocate_raw(sz_t byte_count, align_t alignment) noexcept 
+  { return allocate<byte_t>(byte_count, alignment); }
 
   // returns old_buff if it is the most recent allocation and the arena holds enough storage for the extra elements
   // otherwise, returns a new allocation as if by allocate(new_count)
@@ -86,12 +76,15 @@ public:
 
   eden_always_inline static void deallocate(void*, align_t = {})       noexcept {}
   eden_always_inline static void deallocate(void*, sz_t, align_t = {}) noexcept {}
+  eden_always_inline static void deallocate_raw(void*, align_t = {})       noexcept {}
+  eden_always_inline static void deallocate_raw(void*, sz_t, align_t = {}) noexcept {}
+  
 }; static_assert(raw_allocator_c< Arena<> >);
 
 
-template <sz_t NBytes = 4096, align_t ArenaAlignment = align_t{64}, bool Exclusive = false>
+template <sz_t BytesPerArena = 4096, align_t ArenaAlignment = align_t{64}, bool Exclusive = false>
 class ArenaPool {
-  std::vector< Arena<NBytes, ArenaAlignment, true> > arenas;
+  std::vector< Arena<BytesPerArena, ArenaAlignment, true> > arenas;
 public:
 
   using value_type = byte_t;
@@ -105,27 +98,31 @@ public:
   ArenaPool() noexcept : arenas(1) {}
 
   template <class T = byte_t>
-  requires (sizeof(T) <= NBytes)
-  [[nodiscard]] T*
-  allocate(sz_t count, align_t = {}) noexcept {
-    auto res = arenas.back().template allocate<T>(count);
+  requires (sizeof(T) <= BytesPerArena)
+  [[nodiscard]] constexpr T*
+  allocate(sz_t count, align_t alignment = align_t{alignof(T)}) noexcept {
+    assert(count * sizeof(T) <= BytesPerArena);
+    auto res = arenas.back().template allocate<T>(count, alignment);
     if (res) return res;
-    res = arenas.emplace_back().template allocate<T>(count);
+    res = arenas.emplace_back().template allocate<T>(count, alignment);
     assert(res);
     return res;
   }
 
   eden_always_inline [[nodiscard]] constexpr byte_t*
   allocate_raw(sz_t byte_count, align_t alignment) noexcept {
-    auto res = arenas.back().allocate_raw(byte_count, alignment);
+    assert(byte_count <= BytesPerArena);
+    auto res = arenas.back().template allocate<byte_t>(byte_count, alignment);
     if (res) return res;
-    res = arenas.emplace_back().allocate_raw(byte_count, alignment);
+    res = arenas.emplace_back().template allocate<byte_t>(byte_count, alignment);
     assert(res);
-    return res;
+    return res;   
   }
 
-  eden_always_inline static void deallocate(void*, align_t = {})       noexcept {}
-  eden_always_inline static void deallocate(void*, sz_t, align_t = {}) noexcept {}
+  eden_always_inline static constexpr void deallocate(void*, align_t = {})       noexcept {}
+  eden_always_inline static constexpr void deallocate(void*, sz_t, align_t = {}) noexcept {}
+  eden_always_inline static constexpr void deallocate_raw(void*, align_t = {})       noexcept {}
+  eden_always_inline static constexpr void deallocate_raw(void*, sz_t, align_t = {}) noexcept {}
 
   ArenaPool(ArenaPool const&) = delete;
   ArenaPool(ArenaPool&&) = delete;

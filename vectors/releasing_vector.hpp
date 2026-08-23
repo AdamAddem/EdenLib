@@ -7,6 +7,7 @@
 #include "../typedefs.hpp"
 #include "base_vector.hpp"
 
+#include <functional>
 #include <memory>
 #include <ranges>
 
@@ -31,11 +32,15 @@ struct releasing_vector_settings {
 };
 
 template <class T, auto settings = releasing_vector_settings{}, allocator_for_c<T> Allocator = BasicAllocator<T>>
-requires (settings.is_string ? (sizeof(T) == 1 and std::is_integral_v<T>) : true)
+requires 
+  (settings.is_string ? (sizeof(T) == 1 and std::is_integral_v<T>) : true) // if using string specialization, T must be char-like
+  and (Allocator::supports_allocate_raw == true)
 class releasing_vector : public base_vector<T, releasing_vector<T, settings, Allocator>, settings.base_settings, Allocator>  {
   
-  template < class O, auto other_settings, allocator_for_c<O> >
-  requires (other_settings.is_string ? (sizeof(O) == 1 and std::is_integral_v<O>) : true)
+  template < class O, auto other_settings, allocator_for_c<O> OA>
+  requires 
+    (other_settings.is_string ? (sizeof(O) == 1 and std::is_integral_v<O>) : true)
+    and (OA::supports_allocate_raw == true)
   friend class releasing_vector;
   
   using base = base_vector<T, releasing_vector, settings.base_settings, Allocator>;
@@ -47,7 +52,7 @@ class releasing_vector : public base_vector<T, releasing_vector<T, settings, All
 
   public: static constexpr bool is_string = settings.is_string; private:
   static constexpr bool store_size_and_capacity = settings.store_size_and_capacity;
-  static_assert(store_size_and_capacity ? true : trivially_destructible, "Not storing size and capacity is only possible if the type is trivially destructible.");
+  static_assert( (store_size_and_capacity ? true : trivially_destructible), "Not storing size and capacity is only possible if the type is trivially destructible.");
 
   static constexpr bool has_header = (not Allocator::stateless) or (store_size_and_capacity);
 
@@ -63,21 +68,22 @@ class releasing_vector : public base_vector<T, releasing_vector<T, settings, All
 
   using header = std::conditional_t<store_size_and_capacity, header_sz_cap, header_no_sz_cap>;
 
-  static constexpr u64_t Tsz = sizeof(T);
-  static constexpr u64_t ptr_size = sizeof(void*);
-  static constexpr u64_t header_size = sizeof(header);
-  static constexpr u64_t header_alignment = alignof(header);
+  static constexpr sz_t Tsz = sizeof(T);
+  static constexpr sz_t ptr_size = sizeof(void*);
+  static constexpr sz_t header_size = sizeof(header);
+  static constexpr align_t header_alignment = (align_t) alignof(header);
+  static constexpr align_t allocation_alignment = std::max( header_alignment, (align_t) alignof(T) );
 
   // The offset from the first T element, in terms of T.
   // The smallest possible multiple of Tsz that will fit a header.
-  static constexpr u64_t header_offset = (not has_header) ? 0 :
+  static constexpr sz_t header_offset = (not has_header) ? 0 :
     (Tsz >= header_size ? 1 : (header_size + Tsz - 1) / Tsz);
 
   eden_always_inline [[nodiscard]] static constexpr header* get_header_from(T* data) noexcept requires has_header { assert(data not_eq nullptr); return std::launder((header*)(data - header_offset)); }
   eden_always_inline [[nodiscard]] constexpr header* header_ptr() const noexcept requires has_header { return get_header_from(m_begin); }
 
   eden_always_inline void
-  construct_header() const noexcept
+  construct_header() noexcept
   requires has_header {
     if constexpr(store_size_and_capacity)
       new (header_ptr()) header( std::move(m_alloc), this->size(), this->capacity() );     
@@ -85,31 +91,36 @@ class releasing_vector : public base_vector<T, releasing_vector<T, settings, All
       new (header_ptr()) header( std::move(m_alloc) );
   }
 
-  constexpr void allocate_from_empty(sz_t count) noexcept {
-    assert(m_begin == nullptr);
-    assert(m_size == nullptr);
-    assert(m_cap == nullptr);
-
-    m_size = m_begin = m_alloc.allocate(count + header_offset) + header_offset;
-    m_cap = m_begin + count;
-#ifndef NDEBUG
-    if constexpr(has_header) {
-      sz_t fake_space = sz_max;
-      void* ptr_alignment_check = m_begin;
-      assert(std::align(header_alignment, header_size, ptr_alignment_check, fake_space) == m_begin); // ensures the header is propely aligned
-    }
-#endif
+  // allocates space for count + header_offset T's
+  // returns pointer to after header
+  eden_always_inline
+  constexpr T* allocate(sz_t count) noexcept {
+    assert(count not_eq 0);
+    auto const byte_count = (count + header_offset) * Tsz;
+    return ( (T*) m_alloc.allocate_raw( byte_count, allocation_alignment) ) + header_offset;
   }
 
   constexpr void deallocate() noexcept {
     if (m_begin == nullptr) return;
-    m_alloc.deallocate(m_begin - header_offset,  this->capacity() + header_offset);
+    auto const byte_count = (this->capacity() + header_offset) * Tsz;
+    m_alloc.deallocate_raw( (byte_t*) (m_begin - header_offset),  byte_count, allocation_alignment );
     m_cap = m_size = m_begin = nullptr;
+  }
+  
+  constexpr void allocate_from_empty(sz_t count) noexcept {
+    assert(count not_eq 0);
+    assert(m_begin == nullptr);
+    assert(m_size == nullptr);
+    assert(m_cap == nullptr);
+
+    m_size = m_begin = allocate(count);
+    m_cap = m_begin + count;
   }
 
   constexpr void expand_to(sz_t count) noexcept {
+    assert(count not_eq 0);
     assert(count >= this->size());
-    T* new_buff = m_alloc.allocate(count + header_offset) + header_offset;
+    T* new_buff = allocate(count);
 
     auto const sz = size();
     if constexpr(eden_trivially_relocatable(T)) {
@@ -140,13 +151,7 @@ public:
     
     eden_always_inline constexpr void 
     destroy_and_deallocate() noexcept
-    requires has_header
     { releasing_vector::destroy_and_deallocate(std::move(*this)); }
-
-    eden_always_inline constexpr void 
-    destroy_and_deallocate(sz_t count) noexcept
-    requires (not has_header)
-    { releasing_vector::destroy_and_deallocate(std::move(*this), count); }
 
     // note that this method is more expensive than a typical size() call
     eden_always_inline [[nodiscard]] constexpr sz_t size() const noexcept requires store_size_and_capacity { return releasing_vector::data_size(*this); }
@@ -168,7 +173,7 @@ public:
   constexpr explicit
   releasing_vector(released_ptr released_data) noexcept
   requires store_size_and_capacity {
-    m_begin = released_data.release(); assert(m_begin not_eq nullptr);
+    m_begin = released_data.release(); if(m_begin == nullptr) return;
     auto h = get_header_from(m_begin);
     m_alloc = std::move(h->alloc);
 
@@ -179,9 +184,8 @@ public:
     std::destroy_at(h);
   }
 
-  eden_always_inline constexpr explicit
-  releasing_vector(Allocator const& alloc) noexcept
-  : base(alloc) {}
+  eden_always_inline constexpr explicit releasing_vector(Allocator const& alloc) noexcept : base(alloc) {}
+  eden_always_inline constexpr explicit releasing_vector(Allocator&& alloc) noexcept : base(std::move(alloc)) {}
   
   template <sz_t N>
   explicit
@@ -263,7 +267,8 @@ public:
     }
     auto const cap = header_ptr->capacity;
     std::destroy_at(header_ptr);
-    alloc.deallocate(data.get() - header_offset, cap + header_offset);
+    
+    alloc.deallocate_raw( (byte_t*)(data.get() - header_offset), (cap + header_offset) * Tsz, allocation_alignment );
   }
 
   static constexpr void
@@ -274,12 +279,22 @@ public:
     auto const header_ptr = get_header_from(data.get());
     auto alloc = std::move(header_ptr->alloc);
     std::destroy_at(header_ptr);
-    alloc.deallocate(data.get() - header_offset);
+    alloc.deallocate_raw( (byte_t*)(data.get() - header_offset), allocation_alignment );
   }
 
-  eden_always_inline static constexpr void destroy_and_deallocate(released_ptr data, sz_t count) noexcept requires (not has_header) { Allocator{}.deallocate(data.get(), count); }
-  eden_always_inline static constexpr void destroy_and_deallocate(released_span data) noexcept requires (not has_header) { Allocator{}.deallocate(data.get(), data.size()); }
-  eden_always_inline static constexpr void destroy_and_deallocate(released_span data) noexcept { return destroy_and_deallocate(released_ptr(data.get())); }
+  eden_always_inline static constexpr void
+  destroy_and_deallocate(released_ptr data) noexcept 
+  requires (not has_header) 
+  { Allocator{}.deallocate_raw( (byte_t*)(data.get() - header_offset), allocation_alignment );  }
+  
+  eden_always_inline static constexpr void 
+  destroy_and_deallocate(released_span data) noexcept 
+  requires (not has_header) 
+  { return destroy_and_deallocate(released_ptr(data.get())); }
+
+  eden_always_inline static constexpr void 
+  destroy_and_deallocate(released_span data) noexcept 
+  { return destroy_and_deallocate(released_ptr(data.get())); }
 
   static constexpr released_ptr
   copy_data(released_ptr const& data) noexcept
