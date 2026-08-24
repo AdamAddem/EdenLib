@@ -34,4 +34,18 @@ enumLessThan(T lower, T higher) {
 }
 
 
+namespace detail {
+  template <auto first, auto second, auto... values>
+  consteval bool enumIncreasingByOneImpl() {
+    if constexpr (sizeof...(values) == 0) return second - first == 1;
+    if (second - first == 1) return enumIncreasingByOneImpl<second, values...>();
+    return false;
+  }
+}
+
+template <auto... values>
+requires ( enum_c<decltype(values)> and ... ) and (sizeof...(values) >= 2)
+[[nodiscard]] consteval bool
+enumIncreasingByOne() { return detail::enumIncreasingByOneImpl<values...>(); }
+
 }

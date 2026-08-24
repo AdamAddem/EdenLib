@@ -69,7 +69,8 @@ struct AlignPack {
   static constexpr auto NumTs = sizeof...(Ts);
   static constexpr auto biggest_alignment = max_align_in_pack<Ts...>;
   sz_t alignments[NumTs];
-  sz_t map_to_idx[NumTs];
+  sz_t typeidx_to_alignidx[NumTs]; // maps a T's index in Ts to its index in ATs, where ATs is the parameter pack Ts sorted from biggest to smallest alignment
+  sz_t alignidx_to_typeidx[NumTs]; // maps an index in AT's back to an index in Ts
 
   // don't ask me how any of this works I totally forgot
   consteval AlignPack() noexcept {
@@ -89,11 +90,15 @@ struct AlignPack {
         auto const alignment = alignments[j];
         if( (sz_t) std::bit_width(alignment) == i + 1 ) {
           --alignment_count;
-          map_to_idx[j] = --num;
+          typeidx_to_alignidx[j] = --num;
         }
       }
+
       ++i;
     }
+
+    for(i = 0; i<NumTs; ++i)
+      alignidx_to_typeidx[typeidx_to_alignidx[i]] = i;
   }
 
   eden_always_inline [[nodiscard]] constexpr
