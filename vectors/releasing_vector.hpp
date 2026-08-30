@@ -79,10 +79,10 @@ class releasing_vector : public base_vector<T, releasing_vector<T, settings, All
   static constexpr sz_t header_offset = (not has_header) ? 0 :
     (Tsz >= header_size ? 1 : (header_size + Tsz - 1) / Tsz);
 
-  eden_always_inline [[nodiscard]] static constexpr header* get_header_from(T* data) noexcept requires has_header { assert(data not_eq nullptr); return std::launder((header*)(data - header_offset)); }
-  eden_always_inline [[nodiscard]] constexpr header* header_ptr() const noexcept requires has_header { return get_header_from(m_begin); }
+  edenAlwaysInline [[nodiscard]] static constexpr header* get_header_from(T* data) noexcept requires has_header { assert(data not_eq nullptr); return std::launder((header*)(data - header_offset)); }
+  edenAlwaysInline [[nodiscard]] constexpr header* header_ptr() const noexcept requires has_header { return get_header_from(m_begin); }
 
-  eden_always_inline void
+  edenAlwaysInline void
   construct_header() noexcept
   requires has_header {
     if constexpr(store_size_and_capacity)
@@ -93,7 +93,7 @@ class releasing_vector : public base_vector<T, releasing_vector<T, settings, All
 
   // allocates space for count + header_offset T's
   // returns pointer to after header
-  eden_always_inline
+  edenAlwaysInline
   constexpr T* allocate(sz_t count) noexcept {
     assert(count not_eq 0);
     auto const byte_count = (count + header_offset) * Tsz;
@@ -123,7 +123,7 @@ class releasing_vector : public base_vector<T, releasing_vector<T, settings, All
     T* new_buff = allocate(count);
 
     auto const sz = size();
-    if constexpr(eden_trivially_relocatable(T)) {
+    if constexpr(edenTriviallyRelocatable(T)) {
       std::memcpy(new_buff, m_begin, sz * sizeof(T));
     } else {
       auto i{0uz};
@@ -146,29 +146,29 @@ public:
   static constexpr bool compatible_settings = is_string == other.is_string and store_size_and_capacity == other.store_size_and_capacity;
 
   struct released_ptr : owned_ptr<T[]> {
-    eden_always_inline constexpr released_ptr() noexcept = default;
-    eden_always_inline constexpr explicit released_ptr(T* previously_released_data) noexcept : owned_ptr<T[]>(std::move(previously_released_data)) {}
+    edenAlwaysInline constexpr released_ptr() noexcept = default;
+    edenAlwaysInline constexpr explicit released_ptr(T* previously_released_data) noexcept : owned_ptr<T[]>(std::move(previously_released_data)) {}
     
-    eden_always_inline constexpr void 
+    edenAlwaysInline constexpr void 
     destroy_and_deallocate() noexcept
     { releasing_vector::destroy_and_deallocate(std::move(*this)); }
 
     // note that this method is more expensive than a typical size() call
-    eden_always_inline [[nodiscard]] constexpr sz_t size() const noexcept requires store_size_and_capacity { return releasing_vector::data_size(*this); }
+    edenAlwaysInline [[nodiscard]] constexpr sz_t size() const noexcept requires store_size_and_capacity { return releasing_vector::data_size(*this); }
   };
 
   struct released_span : owned_span<T> {
-    eden_always_inline constexpr released_span() noexcept = default;
-    eden_always_inline constexpr released_span(released_ptr previously_released_data, sz_t sz) noexcept : owned_span<T>(std::move(previously_released_data), sz) {}
-    eden_always_inline constexpr released_span(released_ptr&& cstr) noexcept requires is_string : owned_span<T>(std::move(cstr)){}
+    edenAlwaysInline constexpr released_span() noexcept = default;
+    edenAlwaysInline constexpr released_span(released_ptr previously_released_data, sz_t sz) noexcept : owned_span<T>(std::move(previously_released_data), sz) {}
+    edenAlwaysInline constexpr released_span(released_ptr&& cstr) noexcept requires is_string : owned_span<T>(std::move(cstr)){}
 
-    eden_always_inline constexpr void destroy_and_deallocate() noexcept { releasing_vector::destroy_and_deallocate(std::move(*this)); }
+    edenAlwaysInline constexpr void destroy_and_deallocate() noexcept { releasing_vector::destroy_and_deallocate(std::move(*this)); }
   };
 
-  eden_always_inline constexpr releasing_vector() noexcept = default;
-  eden_always_inline constexpr explicit releasing_vector(released_span released_data) noexcept : releasing_vector(released_ptr(released_data.release())) {}
+  edenAlwaysInline constexpr releasing_vector() noexcept = default;
+  edenAlwaysInline constexpr explicit releasing_vector(released_span released_data) noexcept : releasing_vector(released_ptr(released_data.release())) {}
 
-  template <sz_t N> eden_always_inline constexpr explicit releasing_vector(flags::ReserveInitial<N> x) noexcept : base(x) {}
+  template <sz_t N> edenAlwaysInline constexpr explicit releasing_vector(flags::ReserveInitial<N> x) noexcept : base(x) {}
 
   constexpr explicit
   releasing_vector(released_ptr released_data) noexcept
@@ -184,8 +184,8 @@ public:
     std::destroy_at(h);
   }
 
-  eden_always_inline constexpr explicit releasing_vector(Allocator const& alloc) noexcept : base(alloc) {}
-  eden_always_inline constexpr explicit releasing_vector(Allocator&& alloc) noexcept : base(std::move(alloc)) {}
+  edenAlwaysInline constexpr explicit releasing_vector(Allocator const& alloc) noexcept : base(alloc) {}
+  edenAlwaysInline constexpr explicit releasing_vector(Allocator&& alloc) noexcept : base(std::move(alloc)) {}
   
   template <sz_t N>
   explicit
@@ -207,7 +207,7 @@ public:
   constexpr releasing_vector(releasing_vector const&) = delete;
   constexpr releasing_vector& operator=(releasing_vector const&) = delete;
 
-  eden_always_inline constexpr ~releasing_vector() noexcept {
+  edenAlwaysInline constexpr ~releasing_vector() noexcept {
     if (m_begin == nullptr) return;
     this->destroy(); deallocate();
   }
@@ -223,8 +223,8 @@ public:
     return *this;
   }
 
-  eden_always_inline [[nodiscard]] constexpr T*       data()       noexcept { return m_begin; } // If this is a string, this will NOT return a null terminated string.
-  eden_always_inline [[nodiscard]] constexpr T const* data() const noexcept { return m_begin; } // If this is a string, this will NOT return a null terminated string.
+  edenAlwaysInline [[nodiscard]] constexpr T*       data()       noexcept { return m_begin; } // If this is a string, this will NOT return a null terminated string.
+  edenAlwaysInline [[nodiscard]] constexpr T const* data() const noexcept { return m_begin; } // If this is a string, this will NOT return a null terminated string.
 
   [[nodiscard]] constexpr released_ptr
   release() noexcept
@@ -243,7 +243,7 @@ public:
     return released_ptr(data);
   }
 
-  eden_always_inline [[nodiscard]] constexpr released_ptr
+  edenAlwaysInline [[nodiscard]] constexpr released_ptr
   release() noexcept
   requires (not has_header) {
     auto res = m_begin;
@@ -251,7 +251,7 @@ public:
     return released_ptr(res);
   }
 
-  eden_always_inline [[nodiscard]] constexpr released_span release_span() noexcept { auto sz = this->size(); return released_span(release(), sz); }
+  edenAlwaysInline [[nodiscard]] constexpr released_span release_span() noexcept { auto sz = this->size(); return released_span(release(), sz); }
 
   static constexpr void
   destroy_and_deallocate(released_ptr data) noexcept
@@ -282,17 +282,17 @@ public:
     alloc.deallocate_raw( (byte_t*)(data.get() - header_offset), allocation_alignment );
   }
 
-  eden_always_inline static constexpr void
+  edenAlwaysInline static constexpr void
   destroy_and_deallocate(released_ptr data) noexcept 
   requires (not has_header) 
   { Allocator{}.deallocate_raw( (byte_t*)(data.get() - header_offset), allocation_alignment );  }
   
-  eden_always_inline static constexpr void 
+  edenAlwaysInline static constexpr void 
   destroy_and_deallocate(released_span data) noexcept 
   requires (not has_header) 
   { return destroy_and_deallocate(released_ptr(data.get())); }
 
-  eden_always_inline static constexpr void 
+  edenAlwaysInline static constexpr void 
   destroy_and_deallocate(released_span data) noexcept 
   { return destroy_and_deallocate(released_ptr(data.get())); }
 
@@ -318,24 +318,24 @@ public:
     return v.release();
   }
 
-  eden_always_inline static constexpr sz_t
+  edenAlwaysInline static constexpr sz_t
   data_size(released_ptr const& data) noexcept
   requires store_size_and_capacity {
     auto header_ptr = get_header_from( (T*) data.get() );
     return header_ptr->size;
   }
 
-  eden_always_inline static constexpr sz_t
+  edenAlwaysInline static constexpr sz_t
   data_capacity(released_ptr const& data) noexcept
   requires store_size_and_capacity {
     auto header_ptr = get_header_from( (T*) data.get() );
     return header_ptr->capacity;
   }
 
-  eden_always_inline [[nodiscard]] constexpr operator std::string_view()      const noexcept requires is_string { return std::string_view(m_begin, this->size()); }
-  eden_always_inline [[nodiscard]] constexpr std::string_view to_stringview() const noexcept requires is_string { return this->operator std::string_view(); }
-  eden_always_inline [[nodiscard]] constexpr explicit operator std::string()  const noexcept requires is_string { return std::string(m_begin, this->size()); }
-  eden_always_inline [[nodiscard]] constexpr std::string to_stdstring()       const noexcept requires is_string { return this->operator std::string(); }
+  edenAlwaysInline [[nodiscard]] constexpr operator std::string_view()      const noexcept requires is_string { return std::string_view(m_begin, this->size()); }
+  edenAlwaysInline [[nodiscard]] constexpr std::string_view to_stringview() const noexcept requires is_string { return this->operator std::string_view(); }
+  edenAlwaysInline [[nodiscard]] constexpr explicit operator std::string()  const noexcept requires is_string { return std::string(m_begin, this->size()); }
+  edenAlwaysInline [[nodiscard]] constexpr std::string to_stdstring()       const noexcept requires is_string { return this->operator std::string(); }
 
   template <sz_t N>
   [[nodiscard]] constexpr bool
@@ -354,8 +354,8 @@ public:
     return true;
   }
 
-  eden_always_inline [[nodiscard]] constexpr bool operator==(std::string_view   sv)      const noexcept requires is_string { return to_stringview() == sv; }
-  eden_always_inline [[nodiscard]] constexpr bool operator==(std::string const& std_str) const noexcept requires is_string { return to_stringview() == std::string_view(std_str); }
+  edenAlwaysInline [[nodiscard]] constexpr bool operator==(std::string_view   sv)      const noexcept requires is_string { return to_stringview() == sv; }
+  edenAlwaysInline [[nodiscard]] constexpr bool operator==(std::string const& std_str) const noexcept requires is_string { return to_stringview() == std::string_view(std_str); }
 
 };
 

@@ -35,8 +35,8 @@ namespace eden {
     constexpr ~LifetimeObserver()
     { lifetime_log.emplace_back(std::format("{} id {}: Destructed\n", name_, id)); }
 
-    eden_always_inline [[nodiscard]] static constexpr auto const& getLog() noexcept { return lifetime_log; }
-    eden_always_inline [[nodiscard]] constexpr sz_t getId() const noexcept { return id; }
+    edenAlwaysInline [[nodiscard]] static constexpr auto const& getLog() noexcept { return lifetime_log; }
+    edenAlwaysInline [[nodiscard]] constexpr sz_t getId() const noexcept { return id; }
   };
 
 

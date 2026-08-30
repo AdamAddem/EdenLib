@@ -48,7 +48,7 @@ protected:
 #define call_derived static_cast<Derived*>(this)->
 #define call_derived_const static_cast<const Derived*>(this)->
 
-  eden_always_inline constexpr void 
+  edenInlineCXPR void
   zero_members() noexcept {
     if constexpr (is_small) m_begin = nullptr, m_size = 0, m_cap = 0;
     else m_cap = m_size = m_begin = nullptr;
@@ -74,12 +74,12 @@ protected:
     }
   }
 
-  eden_always_inline constexpr T* 
+  edenInlineCXPR T*
   allocate(count_t count) noexcept {
     assert(count not_eq 0);
     return m_alloc.allocate(count);
   }
-  
+
   constexpr void deallocate() noexcept {
     if (m_begin == nullptr) return;
     m_alloc.deallocate(m_begin,  call_derived capacity());
@@ -119,9 +119,9 @@ protected:
   }
 
   // just moves items, does not destroy or deallocate
-  static constexpr void 
+  static constexpr void
   move_from_to(T* from, T* to, sz_t amount) {
-    if constexpr(eden_trivially_relocatable(T)) {
+    if constexpr(edenTriviallyRelocatable(T)) {
       std::memcpy(to, from, amount * sizeof(T));
     }
     else {
@@ -144,22 +144,22 @@ protected:
     // args may be from this vector's buffer, so we do this funny stuff
     auto const count = call_derived capacity() * expansion_mult;
     auto const sz = call_derived size(); assert(count >= sz);
-    
+
     T* new_buff = call_derived allocate(count);
     std::construct_at(new_buff + sz, std::forward<Args>(args)...);
     move_from_to(m_begin, new_buff, sz);
     call_derived destroy();
     call_derived deallocate();
     m_begin = new_buff;
-    
+
     if constexpr (is_small) { m_size = sz + 1; m_cap = count; }
     else { m_size = m_begin + sz + 1; m_cap = m_begin + count; }
-    
+
     return call_derived back();
   }
 
   template <class ...Args>
-  constexpr void allocate_and_construct(count_t count, Args&&... args) noexcept 
+  constexpr void allocate_and_construct(count_t count, Args&&... args) noexcept
   requires constructible_with_c<T, Args...> {
     assert(count not_eq 0);
     call_derived allocate_from_empty(count);
@@ -186,12 +186,12 @@ protected:
   constexpr void expand_to(count_t new_cap) noexcept {
     auto const sz = call_derived size(); assert(new_cap >= sz);
     T* new_buff = call_derived allocate(new_cap);
-    
+
     move_from_to(m_begin, new_buff, sz);
     call_derived destroy();
     call_derived deallocate();
     m_begin = new_buff;
-    
+
     if constexpr (is_small) { m_size = sz; m_cap = new_cap; }
     else { m_size = m_begin + sz; m_cap = m_begin + new_cap; }
   }
@@ -210,7 +210,7 @@ protected:
     }
   }
 
-  eden_always_inline constexpr 
+  edenInlineCXPR
   ~base_vector() noexcept {
     if (m_begin == nullptr) return;
     call_derived destroy(); call_derived deallocate();
@@ -380,20 +380,20 @@ public:
   using const_reverse_iterator = std::reverse_iterator<const_iterator>;
   using reverse_iterator = std::reverse_iterator<iterator>;
 
-  eden_always_inline constexpr base_vector() noexcept = default;
+  edenInlineCXPR base_vector() noexcept = default;
 
   template <count_t N>
   requires (N != flags::DynamicReserveInitial)
-  eden_always_inline constexpr explicit
+  edenInlineCXPR explicit
   base_vector(flags::ReserveInitial<N>) noexcept
   { call_derived allocate_from_empty(N); }
 
-  eden_always_inline constexpr explicit
+  edenInlineCXPR explicit
   base_vector(flags::ReserveInitial<flags::DynamicReserveInitial>, sz_t N) noexcept
   { call_derived allocate_from_empty(N); }
 
-  eden_always_inline constexpr explicit base_vector(Allocator const& alloc) noexcept : m_alloc(alloc) {}
-  eden_always_inline constexpr explicit base_vector(Allocator&& alloc) noexcept : m_alloc(std::move(alloc)) {}
+  edenInlineCXPR explicit base_vector(Allocator const& alloc) noexcept : m_alloc(alloc) {}
+  edenInlineCXPR explicit base_vector(Allocator&& alloc) noexcept : m_alloc(std::move(alloc)) {}
 
   constexpr explicit base_vector(convertible_to_c<T> auto&&... values) noexcept
   : base_vector(flags::reserve_initial<sizeof...(values)>) {
@@ -403,28 +403,28 @@ public:
   constexpr explicit
   base_vector(count_t count, Allocator const& alloc = Allocator()) noexcept
   requires default_constructible
-  : m_alloc(alloc) { 
+  : m_alloc(alloc) {
     assert(count not_eq 0);
-    call_derived allocate_and_construct(count); 
+    call_derived allocate_and_construct(count);
   }
 
   constexpr base_vector(count_t count, T const& value, Allocator const& alloc = Allocator()) noexcept
   requires copy_constructible
-  : m_alloc(alloc) { 
+  : m_alloc(alloc) {
     assert(count not_eq 0);
-    call_derived allocate_and_construct(count, value); 
+    call_derived allocate_and_construct(count, value);
   }
 
   constexpr base_vector(base_vector const&) noexcept = delete;
   constexpr base_vector& operator=(base_vector const&) noexcept = delete;
-  
+
   [[nodiscard]] constexpr Derived
   copy() const noexcept
   requires copy_constructible {
     Derived res;
     auto const sz = call_derived_const size();
     if(sz == 0) return res;
-    
+
     res.reserve(sz);
     if constexpr(std::is_trivially_copy_constructible_v<T>) {
       std::memcpy(res.m_begin, m_begin, sz * sizeof(T));
@@ -443,7 +443,7 @@ public:
 
   template <base_vector_settings other_settings, allocator_for_c<T> other_allocator>
   requires compatible_settings<other_settings> and same_c<Allocator, other_allocator>
-  eden_always_inline constexpr
+  edenInlineCXPR
   base_vector(base_vector<T, Derived, other_settings, other_allocator> &&other) noexcept
   : m_alloc(std::move(other.m_alloc)), m_begin(other.m_begin), m_size(other.m_size), m_cap(other.m_cap)
   { static_cast<Derived&>(other).zero_members(); }
@@ -467,61 +467,61 @@ public:
     return static_cast<Derived&>(*this);
   }
 
-  [[nodiscard]] constexpr T&
+  edenNodiscardCXPR T&
   at(count_t idx) {
     if (idx >= call_derived size())
       throw std::out_of_range("Element access out of bounds in eden::base_vector");
     return m_begin[idx];
   }
 
-  [[nodiscard]] constexpr const T&
+  edenNodiscardCXPR const T&
   at(count_t idx) const {
     if (idx >= call_derived_const size())
       throw std::out_of_range("Element access out of bounds in eden::base_vector");
     return m_begin[idx];
   }
 
-  eden_always_inline [[nodiscard]] constexpr T&       operator[](count_t idx)       noexcept { assert(m_begin); assert(idx < call_derived size()); return m_begin[idx]; }
-  eden_always_inline [[nodiscard]] constexpr T const& operator[](count_t idx) const noexcept { assert(m_begin); assert(idx < call_derived_const size()); return m_begin[idx]; }
+  edenInlineNodiscardCXPR T&       operator[](count_t idx)       noexcept { assert(m_begin); assert(idx < call_derived size()); return m_begin[idx]; }
+  edenInlineNodiscardCXPR T const& operator[](count_t idx) const noexcept { assert(m_begin); assert(idx < call_derived_const size()); return m_begin[idx]; }
 
 #define derived_iter typename Derived::iterator
 #define derived_rev_iter typename Derived::reverse_iterator
 #define derived_const_iter typename Derived::const_iterator
 #define derived_const_rev_iter typename Derived::const_reverse_iterator
 
-  eden_always_inline [[nodiscard]] constexpr auto begin()         noexcept { return derived_iter(m_begin); }
-  eden_always_inline [[nodiscard]] constexpr auto begin()   const noexcept { return derived_const_iter(m_begin); }
-  eden_always_inline [[nodiscard]] constexpr auto cbegin()  const noexcept { return derived_const_iter(m_begin); }
-  eden_always_inline [[nodiscard]] constexpr auto rbegin()        noexcept { return derived_rev_iter(call_derived end()); }
-  eden_always_inline [[nodiscard]] constexpr auto rbegin()  const noexcept { return derived_const_rev_iter(call_derived_const cend()); }
-  eden_always_inline [[nodiscard]] constexpr auto crbegin() const noexcept { return derived_const_rev_iter(call_derived_const cend()); }
-  eden_always_inline [[nodiscard]] constexpr auto end()           noexcept { if constexpr (is_small) return derived_iter(m_begin + m_size); else return derived_iter(m_size); }
-  eden_always_inline [[nodiscard]] constexpr auto end()     const noexcept { if constexpr (is_small) return derived_const_iter(m_begin + m_size); else return derived_const_iter(m_size); }
-  eden_always_inline [[nodiscard]] constexpr auto cend()    const noexcept { return call_derived_const end(); }
-  eden_always_inline [[nodiscard]] constexpr auto rend()          noexcept { return derived_rev_iter( call_derived begin()); }
-  eden_always_inline [[nodiscard]] constexpr auto rend()    const noexcept { return derived_const_rev_iter( call_derived_const cbegin()); }
-  eden_always_inline [[nodiscard]] constexpr auto crend()   const noexcept { return derived_const_rev_iter(call_derived_const cbegin()); }
+  edenInlineNodiscardCXPR auto begin()         noexcept { return derived_iter(m_begin); }
+  edenInlineNodiscardCXPR auto begin()   const noexcept { return derived_const_iter(m_begin); }
+  edenInlineNodiscardCXPR auto cbegin()  const noexcept { return derived_const_iter(m_begin); }
+  edenInlineNodiscardCXPR auto rbegin()        noexcept { return derived_rev_iter(call_derived end()); }
+  edenInlineNodiscardCXPR auto rbegin()  const noexcept { return derived_const_rev_iter(call_derived_const cend()); }
+  edenInlineNodiscardCXPR auto crbegin() const noexcept { return derived_const_rev_iter(call_derived_const cend()); }
+  edenInlineNodiscardCXPR auto end()           noexcept { if constexpr (is_small) return derived_iter(m_begin + m_size); else return derived_iter(m_size); }
+  edenInlineNodiscardCXPR auto end()     const noexcept { if constexpr (is_small) return derived_const_iter(m_begin + m_size); else return derived_const_iter(m_size); }
+  edenInlineNodiscardCXPR  auto cend()    const noexcept { return call_derived_const end(); }
+  edenInlineNodiscardCXPR  auto rend()          noexcept { return derived_rev_iter( call_derived begin()); }
+  edenInlineNodiscardCXPR  auto rend()    const noexcept { return derived_const_rev_iter( call_derived_const cbegin()); }
+  edenInlineNodiscardCXPR auto crend()   const noexcept { return derived_const_rev_iter(call_derived_const cbegin()); }
 
 #undef derived_iter
 #undef derived_rev_iter
 #undef derived_const_iter
 #undef derived_const_rev_iter
 
-  eden_always_inline [[nodiscard]] constexpr T&       front()          noexcept { assert(m_begin); return *m_begin; }
-  eden_always_inline [[nodiscard]] constexpr T const& front()    const noexcept { assert(m_begin); return *m_begin; }
-  eden_always_inline [[nodiscard]] constexpr T&       back()           noexcept { assert(m_size); if constexpr (is_small) return m_begin[m_size - 1]; else return m_size[-1]; }
-  eden_always_inline [[nodiscard]] constexpr T const& back()     const noexcept { assert(m_size); if constexpr (is_small) return m_begin[m_size - 1]; else return m_size[-1]; }
-  eden_always_inline [[nodiscard]] constexpr T*       data()           noexcept { return m_begin; }
-  eden_always_inline [[nodiscard]] constexpr T const* data()     const noexcept { return m_begin; }
-  eden_always_inline [[nodiscard]] constexpr bool     empty()    const noexcept { if constexpr(is_small) return m_size == 0; else return m_size == m_begin; }
-  eden_always_inline [[nodiscard]] constexpr count_t  size()     const noexcept { if constexpr (is_small) return m_size; else return m_size - m_begin; }
-  eden_always_inline [[nodiscard]] constexpr count_t  capacity() const noexcept { if constexpr(is_small) return m_cap; else return m_cap - m_begin; }
-  eden_always_inline               constexpr void     clear()          noexcept { call_derived destroy(); }
+  edenInlineNodiscardCXPR T&       front()          noexcept { assert(m_begin); return *m_begin; }
+  edenInlineNodiscardCXPR T const& front()    const noexcept { assert(m_begin); return *m_begin; }
+  edenInlineNodiscardCXPR T&       back()           noexcept { assert(m_size); if constexpr (is_small) return m_begin[m_size - 1]; else return m_size[-1]; }
+  edenInlineNodiscardCXPR T const& back()     const noexcept { assert(m_size); if constexpr (is_small) return m_begin[m_size - 1]; else return m_size[-1]; }
+  edenInlineNodiscardCXPR T*       data()           noexcept { return m_begin; }
+  edenInlineNodiscardCXPR T const* data()     const noexcept { return m_begin; }
+  edenInlineNodiscardCXPR bool     empty()    const noexcept { if constexpr(is_small) return m_size == 0; else return m_size == m_begin; }
+  edenInlineNodiscardCXPR count_t  size()     const noexcept { if constexpr (is_small) return m_size; else return m_size - m_begin; }
+  edenInlineNodiscardCXPR count_t  capacity() const noexcept { if constexpr(is_small) return m_cap; else return m_cap - m_begin; }
+  edenInlineCXPR          void     clear()          noexcept { call_derived destroy(); }
 
-  eden_always_inline [[nodiscard]] constexpr explicit operator std::span<T>() noexcept { return std::span(m_begin, call_derived size()); }
-  eden_always_inline [[nodiscard]] constexpr explicit operator std::span<const T>() const noexcept { return std::span(m_begin, call_derived_const size()); }
-  eden_always_inline [[nodiscard]] constexpr std::span<T> to_span() noexcept { return call_derived operator std::span<T>(); }
-  eden_always_inline [[nodiscard]] constexpr std::span<const T> to_span() const noexcept { return call_derived_const operator std::span<const T>(); }
+  edenInlineNodiscardCXPR explicit operator std::span<T>() noexcept { return std::span(m_begin, call_derived size()); }
+  edenInlineNodiscardCXPR explicit operator std::span<const T>() const noexcept { return std::span(m_begin, call_derived_const size()); }
+  edenInlineNodiscardCXPR std::span<T> to_span() noexcept { return call_derived operator std::span<T>(); }
+  edenInlineNodiscardCXPR std::span<const T> to_span() const noexcept { return call_derived_const operator std::span<const T>(); }
 
   constexpr void reserve(count_t new_capacity) noexcept {
     if(call_derived capacity() >= new_capacity) return;
@@ -589,17 +589,17 @@ public:
     return call_derived emplace_back_unchecked(std::forward<Args>(args)...);
   }
 
-  eden_always_inline constexpr void
+  edenInlineCXPR void
   push_back(T const& value) noexcept
   requires copy_constructible
   { call_derived emplace_back(value); }
 
-  eden_always_inline constexpr void
+  edenInlineCXPR void
   push_back(T&& value) noexcept
   requires move_constructible
   { call_derived emplace_back(std::move(value)); }
 
-  eden_always_inline constexpr void
+  edenInlineCXPR void
   pop_back() noexcept {
     assert(m_begin);
     if constexpr(is_small) {
@@ -614,12 +614,12 @@ public:
 
   // returns the index of an object located within this vector
   // parameter must be a valid pointer to an object located within this vector, otherwise UB
-  eden_always_inline constexpr sz_t index_in(T const* object_in_here) const noexcept { return m_begin - object_in_here; }
+  edenInlineCXPR sz_t index_in(T const* object_in_here) const noexcept { return m_begin - object_in_here; }
 };
 
 template <class T, class Derived, base_vector_settings lhs_settings, base_vector_settings rhs_settings, allocator_for_c<T> allocator>
 requires base_vector<T, Derived, lhs_settings, allocator>::template compatible_settings<rhs_settings>
-[[nodiscard]] constexpr bool
+edenNodiscardCXPR bool
 operator==(const base_vector<T, Derived, lhs_settings, allocator>& lhs, const base_vector<T, Derived, rhs_settings, allocator>& rhs) noexcept
 requires std::equality_comparable<T> {
   const auto& lhs_derived = static_cast<const Derived&>(lhs);

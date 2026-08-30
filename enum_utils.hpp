@@ -8,7 +8,7 @@
 namespace eden {
 
 template <ExclusivityFlag lower = flags::Inclusive, ExclusivityFlag higher = flags::Inclusive, enum_c T>
-eden_always_inline [[nodiscard]] constexpr bool
+edenAlwaysInline [[nodiscard]] constexpr bool
 enumBetween(T value, T lower_bound, T higher_bound) noexcept {
   static constexpr bool lower_exclusive = std::is_same_v<lower, flags::Exclusive>;
   static constexpr bool higher_exclusive = std::is_same_v<higher, flags::Exclusive>;
@@ -28,7 +28,7 @@ enumBetween(T value, T lower_bound, T higher_bound) noexcept {
 }
 
 template <enum_c T>
-eden_always_inline [[nodiscard]] consteval bool
+edenAlwaysInline [[nodiscard]] consteval bool
 enumLessThan(T lower, T higher) {
   return std::to_underlying(lower) < std::to_underlying(higher);
 }

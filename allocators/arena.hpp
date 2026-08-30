@@ -21,9 +21,9 @@ public:
   static constexpr bool supports_allocate_raw = true;
   static constexpr bool supports_reallocate = true;
 
-  eden_always_inline Arena() noexcept : end(std::start_lifetime_as_array<byte_t>((byte_t*)::operator new(NBytes, ArenaAlignment), NBytes)), remaining(NBytes) {}
-  eden_always_inline Arena(Arena&& other) noexcept : end(other.end), remaining(other.remaining) { other.end = invalid_end; other.remaining = 0; }
-  eden_always_inline ~Arena() { 
+  edenAlwaysInline Arena() noexcept : end(std::start_lifetime_as_array<byte_t>((byte_t*)::operator new(NBytes, ArenaAlignment), NBytes)), remaining(NBytes) {}
+  edenAlwaysInline Arena(Arena&& other) noexcept : end(other.end), remaining(other.remaining) { other.end = invalid_end; other.remaining = 0; }
+  edenAlwaysInline ~Arena() { 
     if(end not_eq invalid_end) ::operator delete( end - (NBytes - remaining), ArenaAlignment );
   }
 
@@ -46,7 +46,7 @@ public:
     return nullptr;
   }
 
-  eden_always_inline [[nodiscard]] constexpr byte_t*
+  edenAlwaysInline [[nodiscard]] constexpr byte_t*
   allocate_raw(sz_t byte_count, align_t alignment) noexcept 
   { return allocate<byte_t>(byte_count, alignment); }
 
@@ -74,10 +74,10 @@ public:
     return std::start_lifetime_as_array<T>(old_buff, new_count);
   }
 
-  eden_always_inline static void deallocate(void*, align_t = {})       noexcept {}
-  eden_always_inline static void deallocate(void*, sz_t, align_t = {}) noexcept {}
-  eden_always_inline static void deallocate_raw(void*, align_t = {})       noexcept {}
-  eden_always_inline static void deallocate_raw(void*, sz_t, align_t = {}) noexcept {}
+  edenAlwaysInline static void deallocate(void*, align_t = {})       noexcept {}
+  edenAlwaysInline static void deallocate(void*, sz_t, align_t = {}) noexcept {}
+  edenAlwaysInline static void deallocate_raw(void*, align_t = {})       noexcept {}
+  edenAlwaysInline static void deallocate_raw(void*, sz_t, align_t = {}) noexcept {}
   
 }; static_assert(raw_allocator_c< Arena<> >);
 
@@ -109,7 +109,7 @@ public:
     return res;
   }
 
-  eden_always_inline [[nodiscard]] constexpr byte_t*
+  edenAlwaysInline [[nodiscard]] constexpr byte_t*
   allocate_raw(sz_t byte_count, align_t alignment) noexcept {
     assert(byte_count <= BytesPerArena);
     auto res = arenas.back().template allocate<byte_t>(byte_count, alignment);
@@ -119,10 +119,10 @@ public:
     return res;   
   }
 
-  eden_always_inline static constexpr void deallocate(void*, align_t = {})       noexcept {}
-  eden_always_inline static constexpr void deallocate(void*, sz_t, align_t = {}) noexcept {}
-  eden_always_inline static constexpr void deallocate_raw(void*, align_t = {})       noexcept {}
-  eden_always_inline static constexpr void deallocate_raw(void*, sz_t, align_t = {}) noexcept {}
+  edenAlwaysInline static constexpr void deallocate(void*, align_t = {})       noexcept {}
+  edenAlwaysInline static constexpr void deallocate(void*, sz_t, align_t = {}) noexcept {}
+  edenAlwaysInline static constexpr void deallocate_raw(void*, align_t = {})       noexcept {}
+  edenAlwaysInline static constexpr void deallocate_raw(void*, sz_t, align_t = {}) noexcept {}
 
   ArenaPool(ArenaPool const&) = delete;
   ArenaPool(ArenaPool&&) = delete;

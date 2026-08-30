@@ -1,60 +1,62 @@
 #pragma once
 #include <cassert>
-#include <utility>
 #include <type_traits>
+#include <utility>
 
-#define eden_unreachable(message) if(true) {assert(false and message); std::unreachable();} else (void)0
-#define eden_throws(...) noexcept(false)
+#define edenUnreachable(message) if(true) {assert(false and message); std::unreachable();} else (void)0
+#define edenThrows(...) noexcept(false)
 
 #ifdef __clang__
-#define eden_restrict __restrict
-#define eden_always_inline [[gnu::always_inline]]
-#define eden_noinline [[gnu::noinline]]
-#define eden_cold [[gnu::cold]]
-#define eden_nonull_args [[gnu::nonnull]]
-#define eden_nonnull_args(...) [[gnu::nonnull(__VA_ARGS__)]]
-#define eden_notnullptr _Nonnull
-#define eden_return_nonnull [[gnu::returns_nonnull]]
+#define edenRestrict __restrict
+#define edenAlwaysInline [[gnu::always_inline]]
+#define edenNoInline [[gnu::noinline]]
+#define edenCold [[gnu::cold]]
+#define edenNoNullArgs [[gnu::nonnull]]
+#define edenNonNullArgs(...) [[gnu::nonnull(__VA_ARGS__)]]
+#define edenNotNullptr _Nonnull
+#define edenReturnNonNull [[gnu::returns_nonnull]]
 #elifdef __GNUG__
-#define eden_restrict __restrict
-#define eden_always_inline [[gnu::always_inline]]
-#define eden_noinline [[gnu::noinline]]
-#define eden_cold [[gnu::cold]]
-#define eden_nonull_args [[gnu::nonnull]]
-#define eden_nonnull_args(...) [[gnu::nonnull(__VA_ARGS__)]]
-#define eden_notnullptr
-#define eden_return_nonnull [[gnu::returns_nonnull]]
+#define edenRestrict __restrict
+#define edenAlwaysInline [[gnu::always_inline]]
+#define edenNoInline [[gnu::noinline]]
+#define edenCold [[gnu::cold]]
+#define edenNoNullArgs [[gnu::nonnull]]
+#define edenNonNullArgs(...) [[gnu::nonnull(__VA_ARGS__)]]
+#define edenNotNullptr
+#define edenReturnNonNull [[gnu::returns_nonnull]]
 #elifdef _MSC_VER
-#define eden_restrict __restrict
-#define eden_always_inline [[msvc::forceinline]]
-#define eden_noinline [[msvc::noinline]]
-#define eden_cold
-#define eden_nonull_args
-#define eden_nonnull_args(...)
-#define eden_notnullptr
-#define eden_return_nonnull
-
+#define edenRestrict __restrict
+#define edenAlwaysInline [[msvc::forceinline]]
+#define edenNoInline [[msvc::noinline]]
+#define edenCold
+#define edenNoNullArgs
+#define edenNonNullArgs(...)
+#define edenNotNullptr
+#define edenReturnNonNull
 #else
-#define eden_restrict
-#define eden_always_inline
-#define eden_noinline
-#define eden_cold
-#define eden_noinline_cold
-#define eden_nonull_args
-#define eden_nonnull_args(...)
-#define eden_notnullptr
-#define eden_return_nonnull
+#define edenRestrict __restrict
+#define edenAlwaysInline [[msvc::forceinline]]
+#define edenNoInline [[msvc::noinline]]
+#define edenCold
+#define edenNoNullArgs
+#define edenNonNullArgs(...)
+#define edenNotNullptr
+#define edenReturnNonNull
 #endif
 
 #if defined(__has_builtin)
   #if __has_builtin(__builtin_is_cpp_trivially_relocatable)
-    #define eden_trivially_relocatable(T) __builtin_is_cpp_trivially_relocatable(T)
+    #define edenTriviallyRelocatable(T) __builtin_is_cpp_trivially_relocatable(T)
   #elif __has_builtin(__is_trivially_relocatable)
-    #define eden_trivially_relocatable(T) __is_trivially_relocatable(T)
+    #define edenTriviallyRelocatable(T) __is_trivially_relocatable(T)
   #endif
 #endif
-#ifndef eden_trivially_relocatable
-  #define eden_trivially_relocatable(T) std::is_trivially_move_constructible_v<T> and std::is_trivially_destructible_v<T>
+#ifndef edenTriviallyRelocatable
+  #define edenTriviallyRelocatable(T) std::is_trivially_move_constructible_v<T> and std::is_trivially_destructible_v<T>
 #endif
 
-#define eden_noinline_cold eden_noinline eden_cold
+#define edenNoInlineCold edenNoInline edenCold
+#define edenInlineNodiscard edenAlwaysInline [[nodiscard]]
+#define edenInlineNodiscardCXPR edenAlwaysInline [[nodiscard]] constexpr
+#define edenInlineCXPR edenAlwaysInline [[nodiscard]]
+#define edenNodiscardCXPR [[nodiscard]] constexpr

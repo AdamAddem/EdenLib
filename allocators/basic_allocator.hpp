@@ -58,33 +58,33 @@ struct BasicAllocator {
 
   static constexpr auto TAlign = align_t{alignof(T)};
 
-  eden_always_inline [[nodiscard]] static T*
+  edenAlwaysInline [[nodiscard]] static T*
   allocate(sz_t count, align_t alignment = TAlign) noexcept { 
     assert( alignment >= TAlign );
     return std::start_lifetime_as_array<T>( (T*) ::operator new[](count * sizeof(T), alignment), count );
   }
 
-  eden_always_inline [[nodiscard]] static byte_t*
+  edenAlwaysInline [[nodiscard]] static byte_t*
   allocate_raw(sz_t byte_count, align_t alignment) noexcept
   { return std::start_lifetime_as_array<byte_t>( (byte_t*) ::operator new[](byte_count, alignment), byte_count); }
 
-  eden_always_inline static void
+  edenAlwaysInline static void
   deallocate(T* allocated, align_t allocated_alignment = TAlign) noexcept {
     assert( allocated_alignment >= TAlign );
     ::operator delete[](allocated, allocated_alignment);
   }
 
-  eden_always_inline static void
+  edenAlwaysInline static void
   deallocate(T* allocated, sz_t allocated_count, align_t allocated_alignment = TAlign) noexcept { 
     assert( allocated_alignment >= TAlign );
     ::operator delete[](allocated, allocated_count * sizeof(T), allocated_alignment); 
   }
 
-  eden_always_inline static void
+  edenAlwaysInline static void
   deallocate_raw(byte_t* bytes, align_t byte_alignment) noexcept
   { ::operator delete[](bytes, byte_alignment); }
 
-  eden_always_inline static void
+  edenAlwaysInline static void
   deallocate_raw(void* bytes, sz_t byte_count, align_t byte_alignment) noexcept
   { ::operator delete[](bytes, byte_count, byte_alignment); }
 

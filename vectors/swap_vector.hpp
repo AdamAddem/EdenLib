@@ -60,7 +60,7 @@ public:
 
   // returns nullptr if not found. element will be moved backwards.
   template<class ...KeyTypes>
-  [[nodiscard]] constexpr T*
+  edenNodiscardCXPR T*
   search(auto&& Predicate, KeyTypes&&... keys) noexcept
   requires(convertible_to_c<std::invoke_result_t<decltype(Predicate), T const&, KeyTypes...>, bool>) {
     if (this->empty()) return nullptr;
@@ -88,7 +88,7 @@ public:
   }
 
   // returns nullptr if not found. element will be moved backwards.
-  eden_always_inline [[nodiscard]] constexpr auto*
+  edenInlineNodiscardCXPR auto*
   search(auto&& key) noexcept
   requires (is_map and std::is_same_v<std::remove_cvref_t<decltype(key)>, typename T::Key_t>)
   { return search(swap_map_predicate, std::forward<decltype(key)>(key)); }
@@ -96,7 +96,7 @@ public:
   // returns nullptr if not found. element will be swapped directly into back.
   // does NOT respect PreserveBackmost.
   template<class ...KeyTypes>
-  [[nodiscard]] constexpr T*
+  edenNodiscardCXPR T*
   search_swapback(auto&& Predicate, KeyTypes&&... keys) noexcept
   requires(convertible_to_c<std::invoke_result_t<decltype(Predicate), T const&, KeyTypes...>, bool>) {
     if (this->empty()) return nullptr;
@@ -117,14 +117,14 @@ public:
 
   // returns nullptr if not found. element will be swapped directly into back.
   // does NOT respect PreserveBackmost.
-  eden_always_inline [[nodiscard]] constexpr auto*
+  edenInlineNodiscardCXPR auto*
   search_swapback(auto&& key) noexcept
   requires (is_map and std::is_same_v<std::remove_cvref_t<decltype(key)>, typename T::Key_t>)
   { return search_swapback(swap_map_predicate, std::forward<decltype(key)>(key)); }
 
   // returns nullptr if not found. pointer is stable only if no search functions other than this are called and no elements are added
   template<class ...KeyTypes>
-  [[nodiscard]] constexpr T*
+  edenNodiscardCXPR T*
   search_noswap(auto&& Predicate, KeyTypes&&... key) noexcept
   requires(convertible_to_c<std::invoke_result_t<decltype(Predicate), T const&, KeyTypes...>, bool>) {
     auto n = this->size();
@@ -138,7 +138,7 @@ public:
   
   // returns nullptr if not found. pointer is stable only if no search functions other than this are called and no elements are added
   template<class ...KeyTypes>
-  [[nodiscard]] constexpr T const*
+  edenNodiscardCXPR T const*
   search_noswap(auto&& Predicate, KeyTypes&&... key) const noexcept
   requires(convertible_to_c<std::invoke_result_t<decltype(Predicate), T const&, KeyTypes...>, bool>) {
     auto n = this->size();
@@ -151,47 +151,30 @@ public:
   }
   
   // returns pointer to element, nullptr if not found. pointer is stable only if no search functions other than this are called and no elements are added
-  eden_always_inline [[nodiscard]] constexpr auto*
+  edenInlineNodiscardCXPR auto*
   search_noswap(auto&& key) noexcept
   requires (is_map and std::is_same_v<std::remove_cvref_t<decltype(key)>, typename T::Key_t>)
   { return search_noswap(swap_map_predicate, std::forward<decltype(key)>(key)); }
 
-  eden_always_inline [[nodiscard]] constexpr auto const*
+  edenInlineNodiscardCXPR auto const*
   search_noswap(auto&& key) const noexcept
   requires (is_map and std::is_same_v<std::remove_cvref_t<decltype(key)>, typename T::Key_t>)
   { return search_noswap(swap_map_predicate, std::forward<decltype(key)>(key)); }
 
-/* TODO: Fix
-  // will swap each element into the unique index specified by GetIdxOf.
-  // only really useful if the object itself keeps track of its original insertion order.
-  // does NOT respect PreserveBackmost.
-  constexpr void
-  sort_by_unique_idx(auto&& GetIdxOf) noexcept
-  requires( (not is_map) and convertible_to_c<std::invoke_result_t<decltype(GetIdxOf), T const&>, count_t>) {
-    auto const sz = this->size();
-    count_t curr_idx{sz};
-    while (curr_idx-- > 0) {
-      auto& element = m_begin[curr_idx];
-      count_t const element_idx = GetIdxOf(element); assert(element_idx < sz);
-      if (element_idx not_eq curr_idx)
-        std::swap(element, m_begin[element_idx]);
-    }
-    } */
-
-  // returns pointer to element. pointer is stable if no functions other than this or search_noswap are called and no elements are added. WILL NOT RETURN NULLPTR.
+  // returns reference to element. reference is stable if no functions other than this or search_noswap are called and no elements are added.
   // GetIdxOf should return the unique index to swap an element into
   // First checks if element at index element_id has GetIdxOf(element) == element_id, returns pointer if true.
   // If not, searches for an element such that GetIdxOf(element) == element_id and swaps that element into its proper index, then returns.
   // Warning: assumes the container has an element with element_id. Treat this like operator[], ensure the vector has element_id < size().
   // does NOT respect PreserveBackmost.
-  [[nodiscard]] constexpr T*
+  edenNodiscardCXPR T&
   gradual_sort_search(auto&& GetIdxOf, count_t element_id) noexcept
   requires((not is_map) and convertible_to_c<std::invoke_result_t<decltype(GetIdxOf), T const&>, count_t>) {
     auto const sz = this->size();
     assert(not this->empty()); assert(element_id < sz);
     auto* const res = m_begin + element_id;
     if ( GetIdxOf(m_begin[element_id]) == element_id )
-      return res;
+      return *res;
 
     auto curr_idx{sz};
     while (curr_idx-- not_eq 0) {
@@ -199,15 +182,15 @@ public:
       count_t const idx = GetIdxOf(element); assert(idx < sz);
       if (idx == element_id) {
         std::swap(element, m_begin[element_id]);
-        return res;
+        return *res;
       }
     }
 
-    eden_unreachable("Element matching element_id was not found in eden::swap_vector::gradual_sort_search. Ensure that such element exists.");
+    edenUnreachable("Element matching element_id was not found in eden::swap_vector::gradual_sort_search. Ensure that such element exists.");
   }
 
   // returns whether the vector is ordered, such that for all elements GetIdxOf(element) == the element's index in the vector
-  [[nodiscard]] constexpr bool
+  edenNodiscardCXPR bool
   is_ordered(auto&& GetIdxOf) noexcept
   requires((not is_map) and convertible_to_c<std::invoke_result_t<decltype(GetIdxOf), T const&>, count_t>) {
     auto const sz = this->size();
@@ -220,15 +203,15 @@ public:
     return true;
 }
 
-  eden_always_inline [[nodiscard]] constexpr T&
-  operator[](count_t idx) noexcept
+  edenInlineNodiscardCXPR T&
+  operator[](count_t idx) const noexcept
   requires (not is_map) {
     assert(m_begin); assert(idx < this->size());
     return m_begin[idx];
   }
 
   // wrapper around search
-  eden_always_inline [[nodiscard]] constexpr auto*
+  edenInlineNodiscardCXPR auto*
   operator [](auto&& key) noexcept
   requires (is_map and std::is_same_v<std::remove_cvref_t<decltype(key)>, typename T::Key_t>)
   { return search(swap_map_predicate, std::forward<decltype(key)>(key)); }
