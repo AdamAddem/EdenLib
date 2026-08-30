@@ -168,7 +168,7 @@ public:
   eden_always_inline constexpr releasing_vector() noexcept = default;
   eden_always_inline constexpr explicit releasing_vector(released_span released_data) noexcept : releasing_vector(released_ptr(released_data.release())) {}
 
-  template <sz_t N> eden_always_inline constexpr explicit releasing_vector(flags::ReserveInitial<N>) noexcept { allocate_from_empty(N); }
+  template <sz_t N> eden_always_inline constexpr explicit releasing_vector(flags::ReserveInitial<N> x) noexcept : base(x) {}
 
   constexpr explicit
   releasing_vector(released_ptr released_data) noexcept

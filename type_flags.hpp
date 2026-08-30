@@ -30,8 +30,8 @@ template <sz_t N>
 requires (N > 0)
 struct ReserveInitial : FlagBase { consteval ReserveInitial() noexcept = default; };
 
-template <sz_t N>
-inline constexpr ReserveInitial<N> reserve_initial;
+inline constexpr sz_t DynamicReserveInitial = sz_max;
+template <sz_t N = DynamicReserveInitial> inline constexpr ReserveInitial<N> reserve_initial;
 }
 
 template <class T>

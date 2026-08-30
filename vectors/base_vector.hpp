@@ -383,12 +383,22 @@ public:
   eden_always_inline constexpr base_vector() noexcept = default;
 
   template <count_t N>
+  requires (N != flags::DynamicReserveInitial)
   eden_always_inline constexpr explicit
   base_vector(flags::ReserveInitial<N>) noexcept
   { call_derived allocate_from_empty(N); }
 
+  eden_always_inline constexpr explicit
+  base_vector(flags::ReserveInitial<flags::DynamicReserveInitial>, sz_t N) noexcept
+  { call_derived allocate_from_empty(N); }
+
   eden_always_inline constexpr explicit base_vector(Allocator const& alloc) noexcept : m_alloc(alloc) {}
   eden_always_inline constexpr explicit base_vector(Allocator&& alloc) noexcept : m_alloc(std::move(alloc)) {}
+
+  constexpr explicit base_vector(convertible_to_c<T> auto&&... values) noexcept
+  : base_vector(flags::reserve_initial<sizeof...(values)>) {
+    (emplace_back_unchecked(std::forward<decltype(values)>(values)), ...);
+  }
 
   constexpr explicit
   base_vector(count_t count, Allocator const& alloc = Allocator()) noexcept
@@ -601,6 +611,10 @@ public:
       std::destroy_at(--m_size);
     }
   }
+
+  // returns the index of an object located within this vector
+  // parameter must be a valid pointer to an object located within this vector, otherwise UB
+  eden_always_inline constexpr sz_t index_in(T const* object_in_here) const noexcept { return m_begin - object_in_here; }
 };
 
 template <class T, class Derived, base_vector_settings lhs_settings, base_vector_settings rhs_settings, allocator_for_c<T> allocator>
