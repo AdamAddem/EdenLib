@@ -616,7 +616,7 @@ public:
 
   // returns the index of an object located within this vector
   // parameter must be a valid pointer to an object located within this vector, otherwise UB
-  edenInlineCXPR sz_t index_in(T const* object_in_here) const noexcept { return m_begin - object_in_here; }
+  edenInlineCXPR sz_t index_in(T const* object_in_here) const noexcept { return object_in_here - m_begin; }
 };
 
 template <class T, class Derived, base_vector_settings lhs_settings, base_vector_settings rhs_settings, allocator_for_c<T> allocator>
