@@ -57,17 +57,17 @@ struct BasicAllocator {
   static constexpr bool supports_reallocate = false;
 
 
-  edenAlwaysInline [[nodiscard]] static T*
+  edenInlineNodiscard static T*
   allocate(sz_t count) noexcept {
     return std::start_lifetime_as_array<T>( (T*) ::operator new[](count * sizeof(T), align_t{alignof(T)}), count );
   }
 
-  edenAlwaysInline [[nodiscard]] static T*
+  edenInlineNodiscard static T*
   allocate(sz_t count, align_t alignment) noexcept {
     return std::start_lifetime_as_array<T>( (T*) ::operator new[](count * sizeof(T), alignment), count );
   }
 
-  edenAlwaysInline [[nodiscard]] static byte_t*
+  edenInlineNodiscard static byte_t*
   allocate_raw(sz_t byte_count, align_t alignment) noexcept
   { return std::start_lifetime_as_array<byte_t>( ::operator new[](byte_count, alignment), byte_count); }
 

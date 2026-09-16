@@ -7,7 +7,7 @@ namespace eden {
 
 // T must not contain any padding
 template <class T>
-[[nodiscard]] constexpr
+edenNodiscardCXPR
 bool are_bitwise_equal(T const* first, T const* second) {
   auto const p1 =     (byte_t const*)  first;
   auto const p1_end = (byte_t const*) (first + 1);
@@ -19,7 +19,7 @@ bool are_bitwise_equal(T const* first, T const* second) {
 // T must not contain any padding
 // first and second may not overlap
 template <class T>
-[[nodiscard]] constexpr
+edenNodiscardCXPR
 bool are_bitwise_equal_restrict(T const* edenRestrict first, T const* edenRestrict second) {
   auto const p1 =     (byte_t const*)  first;
   auto const p1_end = (byte_t const*) (first + 1);

@@ -46,34 +46,36 @@ template <sz_t IDX, class... Ts>
 using type_at_idx = decltype(detail::type_at_idx_impl<IDX, Ts...>())::type;
 
 template <class... Ts>
-struct SizePack {
+struct PackData {
   static constexpr auto NumTs = sizeof...(Ts);
+  static constexpr auto biggest_alignment = max_align_in_pack<Ts...>;
   sz_t sizes[NumTs];
   sz_t total_size{};
   sz_t biggest_size{};
-  consteval SizePack() {
-    detail::fill_with_type_sizes<Ts...>(sizes);
-    for(auto size : sizes) {
-      biggest_size = std::max(biggest_size, size);
-      total_size += size;
-    }
-  }
-
-  eden_always_inline [[nodiscard]] constexpr sz_t
-  operator[](sz_t idx) const noexcept
-  { return sizes[idx]; }
-};
-
-template <class... Ts>
-struct AlignPack {
-  static constexpr auto NumTs = sizeof...(Ts);
-  static constexpr auto biggest_alignment = max_align_in_pack<Ts...>;
+  
   sz_t alignments[NumTs];
   sz_t typeidx_to_alignidx[NumTs]; // maps a T's index in Ts to its index in ATs, where ATs is the parameter pack Ts sorted from biggest to smallest alignment
   sz_t alignidx_to_typeidx[NumTs]; // maps an index in AT's back to an index in Ts
+  sz_t alignidx_to_offset[NumTs];  // maps an index in AT's to its byte offset in a std::tuple<ATs...>
+
+  // Ts:      int, char, void*
+  // aligned: void*, int, char
+  // t_to_a:  [1, 2, 0]
+  // a_to_t:  [2, 0, 1]
+  // a_to_o: [0, 8, 12]
 
   // don't ask me how any of this works I totally forgot
-  consteval AlignPack() noexcept {
+  consteval PackData() noexcept {
+
+    // initialize sizes
+    {
+      detail::fill_with_type_sizes<Ts...>(sizes);
+      for(auto size : sizes) {
+        biggest_size = std::max(biggest_size, size);
+        total_size += size;
+      }
+    }
+    
     detail::fill_with_type_alignments<Ts...>(alignments);
 
     static constexpr auto alignments_count_sz = std::bit_width(biggest_alignment);
@@ -99,11 +101,11 @@ struct AlignPack {
 
     for(i = 0; i<NumTs; ++i)
       alignidx_to_typeidx[typeidx_to_alignidx[i]] = i;
+
+    alignidx_to_offset[0] = 0;
+    for(i = 1; i<NumTs; ++i) alignidx_to_offset[i] = alignidx_to_offset[i-1] + sizes[ alignidx_to_typeidx[i-1] ];
   }
 
-  eden_always_inline [[nodiscard]] constexpr
-  sz_t operator[](sz_t idx) const noexcept
-  { return alignments[idx]; }
 };
 
 

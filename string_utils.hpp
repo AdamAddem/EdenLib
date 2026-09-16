@@ -59,7 +59,7 @@ static constexpr const char(&append_number_to_literal)[str_size+22] = append_num
 // returns a pointer to the end of the destination string
 // assumes src and dest are pointing to different buffers
 // assumes neither ptr is null
-[[nodiscard]] constexpr char*
+edenNodiscardCXPR char*
 stpcpy_restrict(char* edenRestrict dest, const char* edenRestrict src) noexcept {
   assert(dest); assert(src);
   while (true) {
@@ -75,7 +75,7 @@ stpcpy_restrict(char* edenRestrict dest, const char* edenRestrict src) noexcept 
 // an implementation of POSIX's stpcpy
 // returns a pointer to the end of the destination string
 // assumes neither ptr is null
-[[nodiscard]] constexpr char*
+edenNodiscardCXPR char*
 stpcpy(char* dest, char const* src) noexcept {
   assert(dest); assert(src);
   while (true) {
@@ -87,7 +87,7 @@ stpcpy(char* dest, char const* src) noexcept {
   return dest;
 }
 
-[[nodiscard]] constexpr bool
+edenNodiscardCXPR bool
 streq_restrict(const char* edenRestrict first, const char* edenRestrict second, sz_t len) noexcept {
   assert(first); assert(second);
   auto i{0uz};
@@ -99,7 +99,7 @@ streq_restrict(const char* edenRestrict first, const char* edenRestrict second, 
   return true;
 }
 
-[[nodiscard]] constexpr bool
+edenNodiscardCXPR bool
 streq_restrict(const char* edenRestrict first, const char* edenRestrict second) noexcept {
   assert(first); assert(second);
 
@@ -113,7 +113,7 @@ streq_restrict(const char* edenRestrict first, const char* edenRestrict second) 
   }
 }
 
-[[nodiscard]] constexpr bool
+edenNodiscardCXPR bool
 streq(const char* first, const char* second, sz_t len) noexcept {
   auto i{0uz};
   while (i not_eq len) {
@@ -124,7 +124,7 @@ streq(const char* first, const char* second, sz_t len) noexcept {
   return true;
 }
 
-[[nodiscard]] constexpr bool
+edenNodiscardCXPR bool
 streq(const char* first, const char* second) noexcept {
   auto i{0uz};
   while (true) {

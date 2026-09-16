@@ -17,26 +17,26 @@ namespace eden {
     sz_t id;
   public:
 
-    constexpr LifetimeObserver() : id(idgen++)
+    LifetimeObserver() noexcept : id(idgen++)
     { lifetime_log.emplace_back(std::format("{} instance {}: Default Constructed\n", name_, id)); }
 
-    constexpr LifetimeObserver(LifetimeObserver const& other) noexcept : id(idgen++)
+    LifetimeObserver(LifetimeObserver const& other) noexcept : id(idgen++)
     { lifetime_log.emplace_back(std::format("{} instance {}: Copy Constructed with id {}\n", name_, id, other.id)); }
 
-    constexpr LifetimeObserver& operator=(LifetimeObserver const& other) noexcept
+    LifetimeObserver& operator=(LifetimeObserver const& other) noexcept
     { lifetime_log.emplace_back(std::format("{} id {}: Copy Assigned with {}\n", name_, id, other.id)); return *this; }
 
-    constexpr LifetimeObserver(LifetimeObserver&& other) noexcept : id(idgen++)
+    LifetimeObserver(LifetimeObserver&& other) noexcept : id(idgen++)
     { lifetime_log.emplace_back(std::format("{} id {}: Move Constructed with {}\n", name_, id, other.id)); }
 
-    constexpr LifetimeObserver& operator=(LifetimeObserver&& other) noexcept
+    LifetimeObserver& operator=(LifetimeObserver&& other) noexcept
     { lifetime_log.emplace_back(std::format("{} id {}: Move Assigned with {}\n", name_, id, other.id)); return *this; }
 
-    constexpr ~LifetimeObserver()
+    ~LifetimeObserver()
     { lifetime_log.emplace_back(std::format("{} id {}: Destructed\n", name_, id)); }
 
-    edenAlwaysInline [[nodiscard]] static constexpr auto const& getLog() noexcept { return lifetime_log; }
-    edenAlwaysInline [[nodiscard]] constexpr sz_t getId() const noexcept { return id; }
+    edenInlineNodiscard static auto const& getLog() noexcept { return lifetime_log; }
+    edenInlineNodiscard sz_t getId() const noexcept { return id; }
   };
 
 

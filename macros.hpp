@@ -9,7 +9,7 @@
 
 #ifdef __clang__
 #define edenRestrict __restrict
-#define edenAlwaysInline [[gnu::always_inline]]
+#define edenAlwaysInlineBASE [[gnu::always_inline]]
 #define edenNoInline [[gnu::noinline]]
 #define edenHot [[gnu::hot]]
 #define edenCold [[gnu::cold]]
@@ -21,7 +21,7 @@
 #define edenReturnNonNull [[gnu::returns_nonnull]]
 #elifdef __GNUG__
 #define edenRestrict __restrict
-#define edenAlwaysInline [[gnu::always_inline]]
+#define edenAlwaysInlineBASE [[gnu::always_inline]]
 #define edenNoInline [[gnu::noinline]]
 #define edenHot [[gnu::hot]]
 #define edenCold [[gnu::cold]]
@@ -33,7 +33,7 @@
 #define edenReturnNonNull [[gnu::returns_nonnull]]
 #elifdef _MSC_VER
 #define edenRestrict __restrict
-#define edenAlwaysInline [[msvc::forceinline]]
+#define edenAlwaysInlineBASE [[msvc::forceinline]]
 #define edenNoInline [[msvc::noinline]]
 #define edenHot
 #define edenCold
@@ -45,8 +45,8 @@
 #define edenReturnNonNull
 #else
 #define edenRestrict __restrict
-#define edenAlwaysInline [[msvc::forceinline]]
-#define edenNoInline [[msvc::noinline]]
+#define edenAlwaysInlineBASE
+#define edenNoInline
 #define edenHot
 #define edenCold
 #define edenPure
@@ -70,25 +70,25 @@
 
 // might reduce compilation time in debug mode, idk
 #ifndef NDEBUG
-
-#undef edenAlwaysInline
+#undef edenAlwaysInlineBASE
 #undef edenNoInline
 #undef edenHot
 #undef edenCold
 #undef edenPure
 #undef edenConst
 
-#define edenAlwaysInline
+#define edenAlwaysInlineBASE
 #define edenNoInline
 #define edenHot
 #define edenCold
 #define edenPure
 #define edenConst
-
 #endif
 
+
+#define edenAlwaysInline edenAlwaysInlineBASE inline
 #define edenNoInlineCold edenNoInline edenCold
-#define edenInlineNodiscard edenAlwaysInline [[nodiscard]]
-#define edenInlineNodiscardCXPR edenAlwaysInline [[nodiscard]] constexpr
-#define edenInlineCXPR edenAlwaysInline constexpr
+#define edenInlineNodiscard edenAlwaysInlineBASE [[nodiscard]] inline
+#define edenInlineNodiscardCXPR edenAlwaysInlineBASE [[nodiscard]] constexpr inline
+#define edenInlineCXPR edenAlwaysInlineBASE constexpr inline
 #define edenNodiscardCXPR [[nodiscard]] constexpr

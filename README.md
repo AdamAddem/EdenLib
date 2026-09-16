@@ -47,6 +47,7 @@ owned_span is also included in this header, with identical semantics but for spa
 ### metaprogramming/type_class.hpp
 Introduces the 'type' class, allowing for more convenient template meta-programming and the representation of types as first-class citizens. <br>
 Also features an implementation of type_list and a 'nontype_list'. <br>
+( Note that the type class is a WIP and has some unexpected compilation errors, I'm working on it :) )
 
 #### type
 ```cpp

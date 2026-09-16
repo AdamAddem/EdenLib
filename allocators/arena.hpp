@@ -1,5 +1,6 @@
 #pragma once
 #include "basic_allocator.hpp"
+#include "edenlib/macros.hpp"
 #include <vector>
 
 namespace eden {
@@ -30,7 +31,7 @@ public:
   // second parameter is not used and will always align to alignof(T)
   template <class T = byte_t>
   requires (sizeof(T) <= NBytes)
-  [[nodiscard]] constexpr T*
+  edenNodiscardCXPR T*
   allocate(sz_t count, align_t alignment = (align_t)alignof(T)) noexcept {
     auto const alloc_bytes = count * sizeof(T);
 
@@ -46,7 +47,7 @@ public:
     return nullptr;
   }
 
-  edenAlwaysInline [[nodiscard]] constexpr byte_t*
+  edenInlineNodiscardCXPR byte_t*
   allocate_raw(sz_t byte_count, align_t alignment) noexcept 
   { return allocate<byte_t>(byte_count, alignment); }
 
@@ -55,7 +56,7 @@ public:
   // old_buff MUST be from this arena, and old_count MUST reflect that allocations 'count' parameter
   template <class T>
   requires (sizeof(T) <= NBytes)
-  [[nodiscard]] constexpr T*
+  edenNodiscardCXPR T*
   reallocate(T* old_buff, sz_t old_count, sz_t new_count, align_t = {}) noexcept {
     if( (byte_t*)(old_buff + old_count) not_eq end )
       return allocate<T>(new_count);
@@ -74,10 +75,10 @@ public:
     return std::start_lifetime_as_array<T>(old_buff, new_count);
   }
 
-  edenAlwaysInline static void deallocate(void*, align_t = {})       noexcept {}
-  edenAlwaysInline static void deallocate(void*, sz_t, align_t = {}) noexcept {}
-  edenAlwaysInline static void deallocate_raw(void*, align_t = {})       noexcept {}
-  edenAlwaysInline static void deallocate_raw(void*, sz_t, align_t = {}) noexcept {}
+  edenInlineCXPR static void deallocate(void*, align_t = {})       noexcept {}
+  edenInlineCXPR static void deallocate(void*, sz_t, align_t = {}) noexcept {}
+  edenInlineCXPR static void deallocate_raw(void*, align_t = {})       noexcept {}
+  edenInlineCXPR static void deallocate_raw(void*, sz_t, align_t = {}) noexcept {}
   
 }; static_assert(raw_allocator_c< Arena<> >);
 
@@ -99,7 +100,7 @@ public:
 
   template <class T = byte_t>
   requires (sizeof(T) <= BytesPerArena)
-  [[nodiscard]] constexpr T*
+  edenNodiscardCXPR T*
   allocate(sz_t count, align_t alignment = align_t{alignof(T)}) noexcept {
     assert(count * sizeof(T) <= BytesPerArena);
     auto res = arenas.back().template allocate<T>(count, alignment);
@@ -109,7 +110,7 @@ public:
     return res;
   }
 
-  edenAlwaysInline [[nodiscard]] constexpr byte_t*
+  edenInlineCXPR byte_t*
   allocate_raw(sz_t byte_count, align_t alignment) noexcept {
     assert(byte_count <= BytesPerArena);
     auto res = arenas.back().template allocate<byte_t>(byte_count, alignment);
@@ -119,10 +120,10 @@ public:
     return res;   
   }
 
-  edenAlwaysInline static constexpr void deallocate(void*, align_t = {})       noexcept {}
-  edenAlwaysInline static constexpr void deallocate(void*, sz_t, align_t = {}) noexcept {}
-  edenAlwaysInline static constexpr void deallocate_raw(void*, align_t = {})       noexcept {}
-  edenAlwaysInline static constexpr void deallocate_raw(void*, sz_t, align_t = {}) noexcept {}
+  edenInlineCXPR static void deallocate(void*, align_t = {})       noexcept {}
+  edenInlineCXPR static void deallocate(void*, sz_t, align_t = {}) noexcept {}
+  edenInlineCXPR static void deallocate_raw(void*, align_t = {})       noexcept {}
+  edenInlineCXPR static void deallocate_raw(void*, sz_t, align_t = {}) noexcept {}
 
   ArenaPool(ArenaPool const&) = delete;
   ArenaPool(ArenaPool&&) = delete;
