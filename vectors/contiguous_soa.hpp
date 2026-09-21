@@ -116,6 +116,7 @@ public:
 
 // TODO: 
 // - Add settings and custom allocator support
+// - Explore potential size optimization where we only store one pointer and two sz_ts, slicing is done on-demand instead. Probably not very performant but it may matter.
 template <class... Ts>
 requires (sizeof...(Ts) > 1)
 class contiguous_soa {

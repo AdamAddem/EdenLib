@@ -1,3 +1,4 @@
-CMakeLists.txt
 compile_flags.txt
-tests/
+.idea/
+.agents/
+.codex/
