@@ -382,19 +382,24 @@ public:
   edenInlineNodiscardCXPR T const& front()                             const noexcept { return *internal; }
   edenInlineNodiscardCXPR T&       back()                                    noexcept { return *(internal + (size() - 1)); }
   edenInlineNodiscardCXPR T const& back()                              const noexcept { return *(internal + (size() - 1)); }
-  edenInlineNodiscardCXPR T*       get()                                     noexcept { return internal; }
-  edenInlineNodiscardCXPR T const* get()                               const noexcept { return internal; }
+  edenInlineNodiscardCXPR T*       data()                                    noexcept { return internal; }
+  edenInlineNodiscardCXPR T const* data()                              const noexcept { return internal; }
   edenInlineNodiscardCXPR T*       release()                                 noexcept { T* retval = internal; internal = nullptr; return retval; }
   edenInlineNodiscardCXPR sz_t     size()                              const noexcept { if constexpr(dynamicly_sized) return length.m; else return Extent; }
   edenInlineNodiscardCXPR bool     empty()                             const noexcept { return size() == 0; }
-  edenAlwaysInline               constexpr void     reset(T* mine_now, sz_t new_length)       noexcept requires dynamicly_sized { length.m = new_length; internal = mine_now; }
-  edenAlwaysInline               constexpr void     reset(T* mine_now)                        noexcept requires (not dynamicly_sized) { internal = mine_now; }
+  edenInlineCXPR          void     reset(T* mine_now, sz_t new_length)       noexcept requires dynamicly_sized { length.m = new_length; internal = mine_now; }
+  edenInlineCXPR          void     reset(T* mine_now)                        noexcept requires (not dynamicly_sized) { internal = mine_now; }
   edenInlineNodiscardCXPR bool     operator==(std::nullptr_t)          const noexcept { return internal == nullptr; }
   edenInlineNodiscardCXPR T&       operator[](sz_t idx)                      noexcept { return internal[idx]; }
   edenInlineNodiscardCXPR T const& operator[](sz_t idx)                const noexcept { return internal[idx]; }
   edenInlineNodiscardCXPR explicit operator bool()                     const noexcept { return internal not_eq nullptr; }
   edenInlineNodiscardCXPR explicit operator std::string_view()         const noexcept requires is_string { return std::string_view(internal, size()); }
-  edenInlineNodiscardCXPR std::string_view to_stdstring_view()         const noexcept requires is_string { return std::string_view(internal, size()); }
+  edenInlineNodiscardCXPR std::string_view to_string_view()            const noexcept requires is_string { return std::string_view(internal, size()); }
+
+  edenInlineNodiscardCXPR explicit operator std::span<T>()                   noexcept { return std::span(internal, size()); }
+  edenInlineNodiscardCXPR explicit operator std::span<T const>()       const noexcept { return std::span(internal, size()); }
+  edenInlineNodiscardCXPR std::span<T> to_span()                             noexcept { return std::span(internal, size()); }
+  edenInlineNodiscardCXPR std::span<T const> to_span()                 const noexcept { return std::span(internal, size()); }
 
   template <sz_t OtherExtent>
   edenNodiscardCXPR bool
@@ -417,13 +422,13 @@ public:
   requires is_string {
     if (size() not_eq N - 1)
       return false;
-    return to_stdstring_view() == c_str;
+    return to_string_view() == c_str;
   }
 
   edenInlineNodiscardCXPR bool
   operator==(char const* c_str) const noexcept 
   requires is_string 
-  { return to_stdstring_view() == c_str; }
+  { return to_string_view() == c_str; }
 
 };
 

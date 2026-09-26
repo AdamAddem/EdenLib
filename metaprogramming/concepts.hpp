@@ -1,12 +1,14 @@
 #pragma once
 #include "../typedefs.hpp"
 #include <memory>
+#include <type_traits>
 
 namespace eden {
 
 namespace detail {
 template<template <class...> class A, class... T> struct is_a : std::false_type {};
 template<template <class...> class A, class... T> struct is_a<A, A<T...>> : std::true_type {};
+
 }
 
 template <class T> concept pointer_c = std::is_pointer_v<T>;
@@ -22,21 +24,27 @@ template <class T, class... Ts> concept is_one_of = (same_c<T, Ts> or ...);
 
 template <class T> concept default_constructible_c = std::is_default_constructible_v<T>;
 template <class T> concept nothrow_default_constructible_c = std::is_nothrow_default_constructible_v<T>;
+template <class T> concept trivially_default_constructible_c = std::is_trivially_default_constructible_v<T>;
 template <class T, class... Args> concept constructible_with_c = std::is_constructible_v<T, Args...>;
 template <class T, class... Args> concept nothrow_constructible_with_c = std::is_nothrow_constructible_v<T, Args...>;
+template <class T, class... Args> concept trivially_constructible_with_c = std::is_trivially_constructible_v<T, Args...>;
+
 template <class T> concept copy_constructible_c = std::is_copy_constructible_v<T>;
 template <class T> concept copy_assignable_c = std::is_copy_assignable_v<T>;
 template <class T> concept nothrow_copy_constructible_c = std::is_nothrow_copy_constructible_v<T>;
 template <class T> concept nothrow_copy_assignable_c = std::is_nothrow_copy_assignable_v<T>;
+template <class T> concept trivially_copy_constructible_c = std::is_trivially_copy_constructible_v<T>;
+template <class T> concept trivially_copy_assignable_c = std::is_trivially_copy_assignable_v<T>;
+
 template <class T> concept move_constructible_c = std::is_move_constructible_v<T>;
 template <class T> concept move_assignable_c = std::is_move_assignable_v<T>;
 template <class T> concept nothrow_move_constructible_c = std::is_nothrow_move_constructible_v<T>;
 template <class T> concept nothrow_move_assignable_c = std::is_nothrow_move_assignable_v<T>;
+template <class T> concept trivially_move_constructible_c = std::is_trivially_move_constructible_v<T>;
+template <class T> concept trivially_move_assignable_c = std::is_trivially_move_assignable_v<T>;
+
 template <class T> concept swappable_c = std::swappable<T>;
 template <class T> concept nothrow_swappable_c = std::is_nothrow_swappable_v<T>;
-
-
-
 
 
 }

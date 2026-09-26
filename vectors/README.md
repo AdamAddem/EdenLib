@@ -1,17 +1,19 @@
 ### Note:
 The vector implementations within this library do not have any exception safety guarantees. <br>
 As such, most methods are marked noexcept regardless if an element could throw an exception. <br>
+std::move is always used, std::move_if_noexcept is not. <br>
 
 ### Vector 'Settings'
-(Most) Vector implementations within this library each have custom settings, allowing you to specify some generic properties (expansion multiplier), 
-and implementation properties (stability in swap_vector). <br>
-To use customize each vector, pass the settings object into the respective vector's template argument as a non-type parameter. <br>
-I'd recommend that you create a type alias if using custom settings, as writing the entire typename is tedious. <br>
+(Most) Vector implementations within this library each have custom settings, allowing you to specify some generic properties (expansion multiplier), and implementation properties (stability in swap_vector). <br>
+To customize each vector, pass the settings object into the respective vector's template argument as a non-type parameter. <br>
+I'd recommend that you create a type alias if using custom settings. <br>
 ```using my_customization = releasing_vector<char, releasing_vector_settings<false, true, 3>{}>; ```
 The common settings between most vectors is 'Small' and 'ExpansionMult':
-- Small will have the vector use a T* and two u32s for size and capacity, shrinking the vector's size to 16 bytes.
+- Small will have the vector use a T* and two u32s for size and capacity, shrinking the vector's size to 16 bytes and maximum capacity/size to the u32 maximum. 
 - ExpansionMult specifies the expansion rate of the vector after reaching capacity.
-Move / copy constructors are defined for all vectors of the same type with compatible settings, whatever that may be for the specific vector. <br>
+A type 'count_t' is used. This type is u32_t if 'Small' is true, and sz_t if false. <br>
+Move constructors are defined for all vectors of the same type with compatible settings, whatever that may be for the specific vector. <br>
+Copy constructor / assignment is not defined to prevent accidental copies. Use the 'copy' method instead. <br>
 
 ### releasing_vector.hpp
 An implementation of vector able to 'release' ownership over its internal buffer. <br>
@@ -32,14 +34,9 @@ API:
 // methods identical to their std::vector counterparts are excluded.
     
 /*  Constructors / Assignment */
-
     template <sz_t N> explicit (flags::ReserveInitial<N>); // pass in a flags::reserve_initial<N> instance 
-    
     explicit (released_ptr released_data) requires store_header;    // reclaims ownership over data previously released
     explicit (released_span released_data) requires store_header;
-     
-    // copy constructor / assignment unimplemented
-    
 /*  Constructors / Assignment */
 
 /*  Release and Deletion */
@@ -53,11 +50,11 @@ API:
     
     // returns a released_ptr to element-wise copied array
     // equivalent to constructing a new releasing_vector, reserving the exact size, copying all elements into it, then releasing
-    static released_ptr copy_data(const released_ptr& data) requires copy_constructible<T>;
+    static released_ptr copy_data(released_ptr const& data) requires copy_constructible<T>;
     
     // returns the size or capacity of the data
-    static sz_t data_size(const released_ptr& data);
-    static sz_t data_capacity(const released_ptr& data);
+    static sz_t data_size(released_ptr const& data);
+    static sz_t data_capacity(released_ptr const& data);
     
 /*  Release and Deletion */
     
@@ -96,24 +93,24 @@ API:
   
   template<class ...KeyTypes>
   T* search(auto&& Predicate, KeyTypes&&... key)
-  requires(/* predicate accepts (T const&, KeyType...) and returns something convertible to bool */);
+  requires(/* predicate accepts (T const&, KeyTypes...) and returns something convertible to bool */);
   
   // variation that won't swap elements, useful if you need temporary stability or know the element being searched is rare
   // this can also be used so assertions don't affect the state of the program
   template<class ...KeyTypes>
   T* search_noswap(auto&& Predicate, KeyTypes&&... key) const
-  requires(/* predicate accepts (T const&, KeyType...) and returns something convertible to bool */);
+  requires(/* predicate accepts (T const&, KeyType.s..) and returns something convertible to bool */);
   
   // will always swap an element with the backmost, does not respect PreserveBackmost
   template<class ...KeyTypes>
   T* search_swapback(auto&& Predicate, KeyTypes&&... keys)
-  requires(/* predicate accepts (T const&, KeyType...) and returns something convertible to bool */);
+  requires(/* predicate accepts (T const&, KeyTypes...) and returns something convertible to bool */);
   
   // will swap each element into the index specified by GetIdxOf 
   // only really useful if the object itself keeps track of its original insertion order
   // does not respect PreserveBackmost
   constexpr void sort_by_unique_idx(auto&& GetIdxOf)
-  requires(/* is not map and count_t GetIdxOf(T const&); */);
+  requires(/* not map, and GetIdxOf accepts (T const&) and returns something convertible to count_t; */);
   
   // returns pointer to element, never nullptr. pointer is stable if no functions other than this or search_noswap are called and no elements are added. WILL NOT RETURN NULLPTR.
   // GetIdxOf should return the unique index to swap an element into
@@ -143,14 +140,14 @@ Example Usage:
   auto* res = vec.search(predicate, 5);
 ```
 
-### contiguous_soa.hpp (WIP)
+### contiguous_soa.hpp
 An implementation of vector emulating a 'struct of arrays', with the added bonus that all 'arrays' are contiguous on the same buffer. <br>
 All fields have their own seperate 'slice' within the larger buffer, and this slice operates exactly like a normal vector's buffer. <br>
 push_back is used very similarly to typical push_back, with the caveat that you must an element for each field. <br>
 emplace_back requires tuples of arguments for each element. <br>
 
 Settings:
-    - None (yet)
+  - None (yet)
 
 ### multi_vector.hpp (WIP)
 An implementation of vector, similar to contiguous_soa, that allows for multiple types to be allocated on the same buffer. <br>
@@ -162,7 +159,7 @@ Settings:
 
 
 ### Creating your own implementation 
-base_vector.hpp holds a basic vector implementation that is (mostly) standards compliant with the main caveat of no exception safety. <br>
+base_vector.hpp holds a basic vector implementation that is mostly typical, with the main caveat of no exception safety. <br>
 There exists a base_vector_settings class with two settings, Small and ExpansionMult (their effects are detailed in the header). <br>
 To create your own implementation, use the following format: <br>
 ```cpp
@@ -172,18 +169,19 @@ struct custom_vector_settings {
   static constexpr eden::base_vector_settings<Small, ExpansionMult> base_settings{};
 };
 
-template <class T, auto settings = custom_vector_settings{}, eden::allocator_for_c<T> Allocator = std::allocator<T>>
+template <class T, auto settings = custom_vector_settings{}, eden::allocator_for_c<T> Allocator = eden::BasicAllocator<T>>
 class custom_vector : public eden::base_vector<T, custom_vector<T, settings, Allocator>, settings.base_settings, Allocator> {
   static constexpr auto my_setting = settings.my_setting;
   
   using base = eden::base_vector<T, custom_vector, settings.base_settings, Allocator>; // Recommended for easy use of base_vector's members.
   friend class eden::base_vector<T, custom_vector, settings.base_settings, Allocator>; // Required if you override any of the protected members of base_vector.
-  using base::m_begin; // Brings base class members into scope. Required if you don't want to use base:: prefix (due to templating quirks).
+  
+  using base::base;    // Brings base class constructors and destructors into scope.
+  using base::m_begin; // Brings base class members into scope. Use if you don't want to use base:: prefix or this->;
 public:
 };
 ```
 Any overriden methods in the derived class will automatically be preferred anywhere they are used in base_vector, even when called directly on a base_vector&. <br>
 Note that if you plan to use the m_size and m_cap members directly, you must accommodate for the possibility that your vector is 'Small'.
-Normally they are of type T*, but when 'Small' is true they will be of type u32_t. 
 If you don't plan on manipulating these members, prefer to use the size() and capacity() methods instead. <br>
-To prevent use of a setting in base_vector don't include it as a template paremeter in your settings class. Provide your preferred value directly to base_vector_settings. <br>
+To prevent use of a setting in base_vector (such as Small), don't include it as a template paremeter in your settings class. Provide your preferred value directly to base_vector_settings. <br>

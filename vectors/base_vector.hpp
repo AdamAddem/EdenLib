@@ -31,6 +31,8 @@ template <class T, class Derived, base_vector_settings settings = base_vector_se
 requires (move_constructible_c<T> or copy_constructible_c<T>) and std::is_move_constructible_v<Allocator>
 class base_vector {
 protected:
+  using value_type = T;
+
   static constexpr u64_t expansion_mult = settings.expansion_mult;
   static constexpr u64_t first_allocation_size = 1;
   static constexpr auto is_small = settings.is_small;
@@ -43,16 +45,12 @@ protected:
   [[no_unique_address]] Allocator m_alloc;
 
   T* m_begin{};
-  std::conditional_t<is_small, u32_t, T*> m_size{};
-  std::conditional_t<is_small, u32_t, T*> m_cap{};
+
+  using conditional_member_type = std::conditional_t<is_small, u32_t, T*>;
+  conditional_member_type m_size{};
+  conditional_member_type m_cap{};
 #define call_derived static_cast<Derived*>(this)->
 #define call_derived_const static_cast<const Derived*>(this)->
-
-  edenInlineCXPR void
-  zero_members() noexcept {
-    if constexpr (is_small) m_begin = nullptr, m_size = 0, m_cap = 0;
-    else m_cap = m_size = m_begin = nullptr;
-  }
 
   using count_t = std::conditional_t<is_small, u32_t, sz_t>;
 
@@ -83,7 +81,7 @@ protected:
   constexpr void deallocate() noexcept {
     if (m_begin == nullptr) return;
     m_alloc.deallocate(m_begin,  call_derived capacity());
-    call_derived zero_members();
+    call_derived unsafe_zero_members();
   }
 
   constexpr void destroy() noexcept {
@@ -99,22 +97,6 @@ protected:
     }
     else {
       while (m_size not_eq m_begin) std::destroy_at(--m_size);
-    }
-  }
-
-  template <class ...Args>
-  constexpr T&
-  emplace_back_unchecked(Args&&... args) noexcept {
-    assert(m_begin); assert(m_size not_eq m_cap);
-    if constexpr (is_small) {
-      auto const obj_location = m_begin + m_size;
-      std::construct_at(obj_location, std::forward<Args>(args)...);
-      ++m_size;
-      return *obj_location;
-    }
-    else {
-      std::construct_at(m_size, std::forward<Args>(args)...);
-      return *(m_size++);
     }
   }
 
@@ -448,7 +430,7 @@ public:
   edenInlineCXPR
   base_vector(base_vector<T, Derived, other_settings, other_allocator> &&other) noexcept
   : m_alloc(std::move(other.m_alloc)), m_begin(other.m_begin), m_size(other.m_size), m_cap(other.m_cap)
-  { static_cast<Derived&>(other).zero_members(); }
+  { static_cast<Derived&>(other).unsafe_zero_members(); }
 
   template <base_vector_settings other_settings, allocator_for_c<T> other_allocator>
   requires compatible_settings<other_settings> and same_c<Allocator, other_allocator>
@@ -465,22 +447,8 @@ public:
     call_derived destroy(); call_derived deallocate();
     m_alloc = std::move(other.m_alloc);
     m_begin = other.m_begin; m_size = other.m_size; m_cap = other.m_cap;
-    static_cast<Derived&>(other).zero_members();
+    static_cast<Derived&>(other).unsafe_zero_members();
     return static_cast<Derived&>(*this);
-  }
-
-  edenNodiscardCXPR T&
-  at(count_t idx) {
-    if (idx >= call_derived size())
-      throw std::out_of_range("Element access out of bounds in eden::base_vector");
-    return m_begin[idx];
-  }
-
-  edenNodiscardCXPR const T&
-  at(count_t idx) const {
-    if (idx >= call_derived_const size())
-      throw std::out_of_range("Element access out of bounds in eden::base_vector");
-    return m_begin[idx];
   }
 
   edenInlineNodiscardCXPR T&       operator[](count_t idx)       noexcept { assert(m_begin); assert(idx < call_derived size()); return m_begin[idx]; }
@@ -591,6 +559,23 @@ public:
     return call_derived emplace_back_unchecked(std::forward<Args>(args)...);
   }
 
+  template <class ...Args>
+  constexpr T&
+  emplace_back_unchecked(Args&&... args) noexcept
+  requires std::is_constructible_v<T, Args...> {
+    assert(m_begin); assert(m_size not_eq m_cap);
+    if constexpr (is_small) {
+      auto const obj_location = m_begin + m_size;
+      std::construct_at(obj_location, std::forward<Args>(args)...);
+      ++m_size;
+      return *obj_location;
+    }
+    else {
+      std::construct_at(m_size, std::forward<Args>(args)...);
+      return *(m_size++);
+    }
+  }
+
   edenInlineCXPR void
   push_back(T const& value) noexcept
   requires copy_constructible
@@ -617,6 +602,29 @@ public:
   // returns the index of an object located within this vector
   // parameter must be a valid pointer to an object located within this vector, otherwise UB
   edenInlineCXPR sz_t index_in(T const* object_in_here) const noexcept { return object_in_here - m_begin; }
+
+  // does not destroy or deallocate
+  edenInlineCXPR void
+  unsafe_zero_members() noexcept {
+    if constexpr (is_small) m_begin = nullptr, m_size = 0, m_cap = 0;
+    else m_cap = m_size = m_begin = nullptr;
+  }
+
+  edenInlineCXPR std::tuple<T*, conditional_member_type, conditional_member_type, Allocator>
+  unsafe_get_members() noexcept { return std::tuple{m_begin, m_size, m_cap, m_alloc}; }
+
+  edenInlineCXPR std::tuple<T*&, conditional_member_type&, conditional_member_type&, Allocator&>
+  unsafe_get_members_ref() noexcept { return std::tuple{m_begin, m_size, m_cap, m_alloc}; }
+
+  // does not destroy or deallocate
+  edenInlineCXPR void
+  unsafe_set_members(T* new_begin, conditional_member_type new_size, conditional_member_type new_cap, Allocator new_alloc) noexcept {
+    m_begin = new_begin;
+    m_size = new_size;
+    m_cap = new_cap;
+    m_alloc = std::move(new_alloc);
+  }
+
 };
 
 template <class T, class Derived, base_vector_settings lhs_settings, base_vector_settings rhs_settings, allocator_for_c<T> allocator>
@@ -638,4 +646,8 @@ requires std::equality_comparable<T> {
 
 #undef call_derived
 #undef call_derived_const
+
+
+
+
 }
