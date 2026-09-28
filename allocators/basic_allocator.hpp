@@ -56,10 +56,11 @@ struct BasicAllocator {
   static constexpr bool supports_allocate_raw = true;
   static constexpr bool supports_reallocate = false;
 
+  static constexpr auto default_alignment = (align_t) std::max(alignof(T), (sz_t) __STDCPP_DEFAULT_NEW_ALIGNMENT__);
 
   edenInlineNodiscard static T*
   allocate(sz_t count) noexcept {
-    return std::start_lifetime_as_array<T>( (T*) ::operator new[](count * sizeof(T), align_t{alignof(T)}), count );
+    return std::start_lifetime_as_array<T>( (T*) ::operator new[](count * sizeof(T), default_alignment), count);
   }
 
   edenInlineNodiscard static T*
@@ -69,11 +70,11 @@ struct BasicAllocator {
 
   edenInlineNodiscard static byte_t*
   allocate_raw(sz_t byte_count, align_t alignment) noexcept
-  { return std::start_lifetime_as_array<byte_t>( ::operator new[](byte_count, alignment), byte_count); }
+  { return (byte_t*) ::operator new[](byte_count, alignment); }
 
   edenAlwaysInline static void
   deallocate(T* allocated) noexcept {
-    ::operator delete[](allocated, align_t{alignof(T)});
+    ::operator delete[](allocated, default_alignment);
   }
 
   edenAlwaysInline static void
@@ -83,7 +84,7 @@ struct BasicAllocator {
 
   edenAlwaysInline static void
   deallocate(T* allocated, sz_t allocated_count) noexcept {
-    ::operator delete[](allocated, allocated_count * sizeof(T));
+    ::operator delete[](allocated, allocated_count * sizeof(T), default_alignment);
   }
 
   edenAlwaysInline static void

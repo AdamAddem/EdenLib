@@ -12,6 +12,40 @@
 
 namespace eden {
 
+namespace detail {
+
+// just moves items, does not destroy or deallocate
+template<class T>
+static constexpr void move_from_to(T* edenRestrict from, T* edenRestrict to, sz_t amount) {
+  if constexpr(edenTriviallyRelocatable(T)) {
+    std::memcpy(to, from, amount * sizeof(T));
+  }
+  else {
+    sz_t i{};
+    while (i not_eq amount) {
+      std::construct_at(to + i, std::move( from[i]) );
+      ++i;
+    }
+  }
+}
+
+// just moves items, does not destroy or deallocate
+template<class T>
+static constexpr void copy_from_to(T const* edenRestrict from, T* edenRestrict to, sz_t amount) {
+  if constexpr(edenTriviallyRelocatable(T)) {
+    std::memcpy(to, from, amount * sizeof(T));
+  }
+  else {
+    sz_t i{};
+    while (i not_eq amount) {
+      std::construct_at(to + i, from[i] );
+      ++i;
+    }
+  }
+}
+
+}
+
 /*
 *   Small(default false):
 *     - Reduces the vector's size to 16 bytes on 64bit systems by storing a pointer and two u32s.
@@ -100,21 +134,6 @@ protected:
     }
   }
 
-  // just moves items, does not destroy or deallocate
-  static constexpr void
-  move_from_to(T* from, T* to, sz_t amount) {
-    if constexpr(edenTriviallyRelocatable(T)) {
-      std::memcpy(to, from, amount * sizeof(T));
-    }
-    else {
-      auto i{0uz};
-      while (i not_eq amount) {
-        std::construct_at(to + i, std::move_if_noexcept( from[i]) );
-        ++i;
-      }
-    }
-  }
-
   template <class ...Args>
   constexpr T&
   grow_and_emplace(Args&&... args) noexcept {
@@ -129,7 +148,7 @@ protected:
 
     T* new_buff = call_derived allocate(count);
     std::construct_at(new_buff + sz, std::forward<Args>(args)...);
-    move_from_to(m_begin, new_buff, sz);
+    detail::move_from_to(m_begin, new_buff, sz);
     call_derived destroy();
     call_derived deallocate();
     m_begin = new_buff;
@@ -169,7 +188,7 @@ protected:
     auto const sz = call_derived size(); assert(new_cap >= sz);
     T* new_buff = call_derived allocate(new_cap);
 
-    move_from_to(m_begin, new_buff, sz);
+    detail::move_from_to(m_begin, new_buff, sz);
     call_derived destroy();
     call_derived deallocate();
     m_begin = new_buff;
@@ -576,15 +595,24 @@ public:
     }
   }
 
-  edenInlineCXPR void
-  push_back(T const& value) noexcept
-  requires copy_constructible
-  { call_derived emplace_back(value); }
+  edenInlineCXPR void push_back(T const& value) noexcept requires copy_constructible { call_derived emplace_back(value); }
+  edenInlineCXPR void push_back(T&& value)      noexcept requires move_constructible { call_derived emplace_back(std::move(value)); }
 
-  edenInlineCXPR void
-  push_back(T&& value) noexcept
-  requires move_constructible
-  { call_derived emplace_back(std::move(value)); }
+  // values may not alias this vector
+  constexpr void move_append_range(std::span<T> values) {
+    auto const n = values.size();
+    call_derived reserve(size() + n);
+    detail::move_from_to(values.data(), &back(), n);
+    m_size += n;
+  }
+
+  // values may not alias this vector
+  constexpr void copy_append_range(std::span<T const> values) {
+    auto const n = values.size();
+    call_derived reserve(size() + n);
+    detail::copy_from_to(values.data(), &back(), n);
+    m_size += n;
+  }
 
   edenInlineCXPR void
   pop_back() noexcept {
