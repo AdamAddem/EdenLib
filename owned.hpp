@@ -308,7 +308,7 @@ public:
   edenInlineNodiscardCXPR const_reverse_iterator rend() const noexcept {return const_reverse_iterator(cbegin());}
   edenInlineNodiscardCXPR const_reverse_iterator crend() const noexcept {return const_reverse_iterator(cbegin());}
 
-  edenInlineCXPR owned_span() noexcept requires dynamicly_sized : internal(nullptr) {}
+  edenInlineCXPR owned_span() noexcept requires dynamicly_sized : internal(nullptr), length(0) {}
   edenInlineCXPR explicit owned_span(T* mine_now, sz_t count) noexcept requires dynamicly_sized : internal(mine_now), length{count} {}
   edenInlineCXPR explicit owned_span(owned_ptr<T[]> mine_now, sz_t count) noexcept requires dynamicly_sized : internal(mine_now.release()), length{count} {}
 
