@@ -17,16 +17,17 @@ namespace detail {
 // just moves items, does not destroy or deallocate
 template<class T>
 static constexpr void move_from_to(T* edenRestrict from, T* edenRestrict to, sz_t amount) {
-  if constexpr(edenTriviallyRelocatable(T)) {
-    std::memcpy(to, from, amount * sizeof(T));
-  }
-  else {
-    sz_t i{};
-    while (i not_eq amount) {
-      std::construct_at(to + i, std::move( from[i]) );
-      ++i;
+
+  // memcpy not constexpr :(
+  if not consteval {
+    if constexpr(edenTriviallyRelocatable(T)) {
+      std::memcpy(to, from, amount * sizeof(T));
+      return;
     }
   }
+
+  for (sz_t i{}; i<amount; ++i)
+    std::construct_at(to + i, std::move( from[i]) );
 }
 
 // just moves items, does not destroy or deallocate
@@ -429,17 +430,22 @@ public:
     if(sz == 0) return res;
 
     res.reserve(sz);
-    if constexpr(std::is_trivially_copy_constructible_v<T>) {
-      std::memcpy(res.m_begin, m_begin, sz * sizeof(T));
-      if constexpr(is_small) res.m_size = sz; else res.m_size = res.m_begin + sz;
-    }
-    else {
-      auto curr = call_derived_const cbegin();
-      auto const end = call_derived_const cend();
-      while (curr not_eq end) {
-        res.emplace_back(*curr);
-        ++curr;
+
+
+    // memcpy not constexpr :(
+    if not consteval {
+      if constexpr(std::is_trivially_copy_constructible_v<T>) {
+        std::memcpy(res.m_begin, m_begin, sz * sizeof(T));
+        if constexpr(is_small) res.m_size = sz; else res.m_size = res.m_begin + sz;
+        return res;
       }
+    }
+
+    auto curr = call_derived_const cbegin();
+    auto const end = call_derived_const cend();
+    while (curr not_eq end) {
+      res.emplace_back(*curr);
+      ++curr;
     }
     return res;
   }
@@ -486,9 +492,9 @@ public:
   edenInlineNodiscardCXPR auto crbegin() const noexcept { return derived_const_rev_iter(call_derived_const cend()); }
   edenInlineNodiscardCXPR auto end()           noexcept { if constexpr (is_small) return derived_iter(m_begin + m_size); else return derived_iter(m_size); }
   edenInlineNodiscardCXPR auto end()     const noexcept { if constexpr (is_small) return derived_const_iter(m_begin + m_size); else return derived_const_iter(m_size); }
-  edenInlineNodiscardCXPR  auto cend()    const noexcept { return call_derived_const end(); }
-  edenInlineNodiscardCXPR  auto rend()          noexcept { return derived_rev_iter( call_derived begin()); }
-  edenInlineNodiscardCXPR  auto rend()    const noexcept { return derived_const_rev_iter( call_derived_const cbegin()); }
+  edenInlineNodiscardCXPR auto cend()    const noexcept { return call_derived_const end(); }
+  edenInlineNodiscardCXPR auto rend()          noexcept { return derived_rev_iter( call_derived begin()); }
+  edenInlineNodiscardCXPR auto rend()    const noexcept { return derived_const_rev_iter( call_derived_const cbegin()); }
   edenInlineNodiscardCXPR auto crend()   const noexcept { return derived_const_rev_iter(call_derived_const cbegin()); }
 
 #undef derived_iter
@@ -496,16 +502,17 @@ public:
 #undef derived_const_iter
 #undef derived_const_rev_iter
 
-  edenInlineNodiscardCXPR T&       front()          noexcept { assert(m_begin); return *m_begin; }
-  edenInlineNodiscardCXPR T const& front()    const noexcept { assert(m_begin); return *m_begin; }
-  edenInlineNodiscardCXPR T&       back()           noexcept { assert(m_size); if constexpr (is_small) return m_begin[m_size - 1]; else return m_size[-1]; }
-  edenInlineNodiscardCXPR T const& back()     const noexcept { assert(m_size); if constexpr (is_small) return m_begin[m_size - 1]; else return m_size[-1]; }
-  edenInlineNodiscardCXPR T*       data()           noexcept { return m_begin; }
-  edenInlineNodiscardCXPR T const* data()     const noexcept { return m_begin; }
-  edenInlineNodiscardCXPR bool     empty()    const noexcept { if constexpr(is_small) return m_size == 0; else return m_size == m_begin; }
-  edenInlineNodiscardCXPR count_t  size()     const noexcept { if constexpr (is_small) return m_size; else return m_size - m_begin; }
-  edenInlineNodiscardCXPR count_t  capacity() const noexcept { if constexpr(is_small) return m_cap; else return m_cap - m_begin; }
-  edenInlineCXPR          void     clear()          noexcept { call_derived destroy(); }
+  edenInlineNodiscardCXPR T&       front()              noexcept { assert(m_begin); return *m_begin; }
+  edenInlineNodiscardCXPR T const& front()       const noexcept { assert(m_begin); return *m_begin; }
+  edenInlineNodiscardCXPR T&       back()              noexcept { assert(m_size); if constexpr (is_small) return m_begin[m_size - 1]; else return *(m_size-1); }
+  edenInlineNodiscardCXPR T const& back()        const noexcept { assert(m_size); if constexpr (is_small) return m_begin[m_size - 1]; else return *(m_size-1); }
+  edenInlineNodiscardCXPR T*       data()              noexcept { return m_begin; }
+  edenInlineNodiscardCXPR T const* data()        const noexcept { return m_begin; }
+  edenInlineNodiscardCXPR bool     empty()       const noexcept { if constexpr(is_small) return m_size == 0; else return m_size == m_begin; }
+  edenInlineNodiscardCXPR count_t  size()        const noexcept { if constexpr (is_small) return m_size; else return m_size - m_begin; }
+  edenInlineNodiscardCXPR count_t  capacity()    const noexcept { if constexpr(is_small) return m_cap; else return m_cap - m_begin; }
+  edenInlineCXPR          void     clear()             noexcept { call_derived destroy(); }
+  edenInlineNodiscardCXPR bool     at_capacity() const noexcept { return size() == capacity(); }
 
   edenInlineNodiscardCXPR explicit operator std::span<T>() noexcept { return std::span(m_begin, call_derived size()); }
   edenInlineNodiscardCXPR explicit operator std::span<const T>() const noexcept { return std::span(m_begin, call_derived_const size()); }

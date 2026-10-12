@@ -58,47 +58,88 @@ struct BasicAllocator {
 
   static constexpr auto default_alignment = (align_t) std::max(alignof(T), (sz_t) __STDCPP_DEFAULT_NEW_ALIGNMENT__);
 
-  edenInlineNodiscard static T*
+  edenInlineNodiscardCXPR static T*
   allocate(sz_t count) noexcept {
-    return std::start_lifetime_as_array<T>( (T*) ::operator new[](count * sizeof(T), default_alignment), count);
+    if consteval {
+      return std::allocator<T>{}.allocate(count);
+    }
+    else {
+      return std::start_lifetime_as_array<T>( (T*) ::operator new[](count * sizeof(T), default_alignment), count);
+    }
   }
 
-  edenInlineNodiscard static T*
+  edenInlineNodiscardCXPR static T*
   allocate(sz_t count, align_t alignment) noexcept {
-    return std::start_lifetime_as_array<T>( (T*) ::operator new[](count * sizeof(T), alignment), count );
+    if consteval {
+      return std::allocator<T>{}.allocate(count);
+    }
+    else {
+      return std::start_lifetime_as_array<T>( (T*) ::operator new[](count * sizeof(T), alignment), count );
+    }
   }
 
-  edenInlineNodiscard static byte_t*
-  allocate_raw(sz_t byte_count, align_t alignment) noexcept
-  { return (byte_t*) ::operator new[](byte_count, alignment); }
+  edenInlineNodiscardCXPR static byte_t*
+  allocate_raw(sz_t byte_count, align_t alignment) noexcept {
+    if consteval {
+      return std::allocator<byte_t>{}.allocate(byte_count);
+    }
+    else {
+      return (byte_t*) ::operator new[](byte_count, alignment);
+    }
+  }
 
+  // can't be constexpr because std::allocator needs the count as well :6
   edenAlwaysInline static void
   deallocate(T* allocated) noexcept {
-    ::operator delete[](allocated, default_alignment);
+    if consteval {
+      std::allocator<T>{}.deallocate(allocated);
+    }
+    else {
+      ::operator delete[](allocated, default_alignment);
+    }
   }
 
+  // can't be constexpr because std::allocator needs the count as well :6
   edenAlwaysInline static void
   deallocate(T* allocated, align_t allocated_alignment) noexcept {
     ::operator delete[](allocated, allocated_alignment);
   }
 
-  edenAlwaysInline static void
+  edenInlineCXPR static void
   deallocate(T* allocated, sz_t allocated_count) noexcept {
-    ::operator delete[](allocated, allocated_count * sizeof(T), default_alignment);
+    if consteval {
+      std::allocator<T>{}.deallocate(allocated, allocated_count);
+    }
+    else {
+      ::operator delete[](allocated, allocated_count * sizeof(T), default_alignment);
+    }
   }
 
-  edenAlwaysInline static void
+  edenInlineCXPR static void
   deallocate(T* allocated, sz_t allocated_count, align_t allocated_alignment) noexcept {
-    ::operator delete[](allocated, allocated_count * sizeof(T), allocated_alignment);
+    if consteval {
+      std::allocator<T>{}.deallocate(allocated, allocated_count);
+    }
+    else {
+      ::operator delete[](allocated, allocated_count * sizeof(T), allocated_alignment);
+    }
   }
 
+  // can't be constexpr because std::allocator needs the count as well :6
   edenAlwaysInline static void
-  deallocate_raw(byte_t* bytes, align_t byte_alignment) noexcept
-  { ::operator delete[](bytes, byte_alignment); }
+  deallocate_raw(byte_t* bytes, align_t byte_alignment) noexcept {
+    ::operator delete[](bytes, byte_alignment);
+  }
 
-  edenAlwaysInline static void
-  deallocate_raw(void* bytes, sz_t byte_count, align_t byte_alignment) noexcept
-  { ::operator delete[](bytes, byte_count, byte_alignment); }
+  edenInlineCXPR static void
+  deallocate_raw(byte_t* bytes, sz_t byte_count, align_t byte_alignment) noexcept {
+    if consteval {
+      std::allocator<byte_t>{}.deallocate(bytes, byte_count);
+    }
+    else {
+      ::operator delete[](bytes, byte_count, byte_alignment);
+    }
+  }
 
 }; static_assert(allocator_for_c<BasicAllocator<int>, int>);
 
