@@ -35,7 +35,7 @@ template <class T, auto settings = releasing_vector_settings{}, allocator_for_c<
 requires 
   (settings.is_string ? (sizeof(T) == 1 and std::is_integral_v<T>) : true) // if using string specialization, T must be char-like
   and (Allocator::supports_allocate_raw == true)
-class releasing_vector : public base_vector<T, releasing_vector<T, settings, Allocator>, settings.base_settings, Allocator>  {
+class releasing_vector : public base_vector<true, T, releasing_vector<T, settings, Allocator>, settings.base_settings, Allocator>  {
   
   template < class O, auto other_settings, allocator_for_c<O> OA>
   requires 
@@ -43,8 +43,8 @@ class releasing_vector : public base_vector<T, releasing_vector<T, settings, All
     and (OA::supports_allocate_raw == true)
   friend class releasing_vector;
   
-  using base = base_vector<T, releasing_vector, settings.base_settings, Allocator>;
-  friend class base_vector<T, releasing_vector, settings.base_settings, Allocator>;
+  using base = base_vector<true, T, releasing_vector, settings.base_settings, Allocator>;
+  friend class base_vector<true, T, releasing_vector, settings.base_settings, Allocator>;
   
   using base::m_begin; using base::m_size; using base::m_cap; using base::m_alloc;
   using base::copy_constructible;
@@ -167,7 +167,12 @@ public:
   edenInlineCXPR releasing_vector() noexcept = default;
   edenAlwaysInline explicit releasing_vector(released_span released_data) noexcept : releasing_vector(released_ptr(released_data.release())) {}
 
-  template <sz_t N> edenAlwaysInline explicit releasing_vector(flags::ReserveInitial<N> x) noexcept : base(x) {}
+  template <sz_t N>
+  edenAlwaysInline explicit releasing_vector(flags::ReserveInitial<N>) noexcept {
+    allocate_from_empty(N);
+  }
+
+  edenAlwaysInline explicit releasing_vector(flags::ReserveInitial<flags::DynamicReserveInitial>, sz_t N) noexcept { allocate_from_empty(N); }
 
   constexpr explicit
   releasing_vector(released_ptr released_data) noexcept

@@ -170,11 +170,11 @@ struct custom_vector_settings {
 };
 
 template <class T, auto settings = custom_vector_settings{}, eden::allocator_for_c<T> Allocator = eden::BasicAllocator<T>>
-class custom_vector : public eden::base_vector<T, custom_vector<T, settings, Allocator>, settings.base_settings, Allocator> {
+class custom_vector : public eden::base_vector< true/false, T, custom_vector<T, settings, Allocator>, settings.base_settings, Allocator> {
   static constexpr auto my_setting = settings.my_setting;
   
-  using base = eden::base_vector<T, custom_vector, settings.base_settings, Allocator>; // Recommended for easy use of base_vector's members.
-  friend class eden::base_vector<T, custom_vector, settings.base_settings, Allocator>; // Required if you override any of the protected members of base_vector.
+  using base = eden::base_vector<true/false, T, custom_vector, settings.base_settings, Allocator>; // Recommended for easy use of base_vector's members.
+  friend class eden::base_vector<true/false, T, custom_vector, settings.base_settings, Allocator>; // Required if you override any of the protected members of base_vector.
   
   using base::base;    // Brings base class constructors and destructors into scope.
   using base::m_begin; // Brings base class members into scope. Use if you don't want to use base:: prefix or this->;
@@ -184,4 +184,8 @@ public:
 Any overriden methods in the derived class will automatically be preferred anywhere they are used in base_vector, even when called directly on a base_vector&. <br>
 Note that if you plan to use the m_size and m_cap members directly, you must accommodate for the possibility that your vector is 'Small'.
 If you don't plan on manipulating these members, prefer to use the size() and capacity() methods instead. <br>
-To prevent use of a setting in base_vector (such as Small), don't include it as a template paremeter in your settings class. Provide your preferred value directly to base_vector_settings. <br>
+
+The first parameter in the base vector type is 'override_allocate'. <br>
+If you write your own versions of the 'allocate' or 'deallocate' methods, you *must* set this flag to true. <br>
+Doing so will disable the constructors that allocate, and requires you to write your own destructor deallocating and freeing the memory. <br>
+This is because calling the derived class's allocate and deallocate methods from the base classes' constructors or destructors would result in undefined behavior. <br>

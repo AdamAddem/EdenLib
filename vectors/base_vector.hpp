@@ -61,8 +61,7 @@ struct base_vector_settings {
   static constexpr bool is_small = sizeof(void*) >= 8 ? Small : false;
 };
 
-/* Note that there is zero exception safety */
-template <class T, class Derived, base_vector_settings settings = base_vector_settings{}, allocator_for_c<T> Allocator = BasicAllocator<T>>
+template <bool override_allocate, class T, class Derived, base_vector_settings settings = {}, allocator_for_c<T> Allocator = BasicAllocator<T>>
 requires (move_constructible_c<T> or copy_constructible_c<T>) and std::is_move_constructible_v<Allocator>
 class base_vector {
 protected:
@@ -212,11 +211,18 @@ protected:
     }
   }
 
-  edenInlineCXPR
-  ~base_vector() noexcept {
+  static constexpr bool using_base_allocation = not override_allocate;
+
+  constexpr ~base_vector() noexcept
+  requires using_base_allocation {
     if (m_begin == nullptr) return;
-    call_derived destroy(); call_derived deallocate();
+    destroy(); deallocate();
   }
+
+  constexpr ~base_vector() noexcept {
+    assert(m_begin == nullptr); // derived class must handle this
+  }
+
 public:
 
   template<base_vector_settings other>
@@ -390,30 +396,34 @@ public:
   requires (N != flags::DynamicReserveInitial)
   edenInlineCXPR explicit
   base_vector(flags::ReserveInitial<N>) noexcept
-  { call_derived allocate_from_empty(N); }
+  requires using_base_allocation {
+    allocate_from_empty(N);
+  }
 
-  edenInlineCXPR explicit
-  base_vector(flags::ReserveInitial<flags::DynamicReserveInitial>, sz_t N) noexcept
-  { call_derived allocate_from_empty(N); }
+  edenInlineCXPR base_vector(flags::ReserveInitial<flags::DynamicReserveInitial>, sz_t N) noexcept
+  requires using_base_allocation {
+    allocate_from_empty(N);
+  }
 
   edenInlineCXPR explicit base_vector(Allocator const& alloc) noexcept : m_alloc(alloc) {}
   edenInlineCXPR explicit base_vector(Allocator&& alloc) noexcept : m_alloc(std::move(alloc)) {}
 
   constexpr explicit base_vector(convertible_to_c<T> auto&&... values) noexcept
+  requires using_base_allocation
   : base_vector(flags::reserve_initial<sizeof...(values)>) {
     (emplace_back_unchecked(std::forward<decltype(values)>(values)), ...);
   }
 
   constexpr explicit
   base_vector(count_t count, Allocator const& alloc = Allocator()) noexcept
-  requires default_constructible
+  requires default_constructible and using_base_allocation
   : m_alloc(alloc) {
     assert(count not_eq 0);
-    call_derived allocate_and_construct(count);
+    allocate_and_construct(count);
   }
 
   constexpr base_vector(count_t count, T const& value, Allocator const& alloc = Allocator()) noexcept
-  requires copy_constructible
+  requires copy_constructible and using_base_allocation
   : m_alloc(alloc) {
     assert(count not_eq 0);
     call_derived allocate_and_construct(count, value);
@@ -430,7 +440,6 @@ public:
     if(sz == 0) return res;
 
     res.reserve(sz);
-
 
     // memcpy not constexpr :(
     if not consteval {
@@ -453,13 +462,13 @@ public:
   template <base_vector_settings other_settings, allocator_for_c<T> other_allocator>
   requires compatible_settings<other_settings> and same_c<Allocator, other_allocator>
   edenInlineCXPR
-  base_vector(base_vector<T, Derived, other_settings, other_allocator> &&other) noexcept
+  base_vector(base_vector<override_allocate, T, Derived, other_settings, other_allocator> &&other) noexcept
   : m_alloc(std::move(other.m_alloc)), m_begin(other.m_begin), m_size(other.m_size), m_cap(other.m_cap)
   { static_cast<Derived&>(other).unsafe_zero_members(); }
 
   template <base_vector_settings other_settings, allocator_for_c<T> other_allocator>
   requires compatible_settings<other_settings> and same_c<Allocator, other_allocator>
-  constexpr void swap(base_vector<T, Derived, other_settings, other_allocator>& other) noexcept {
+  constexpr void swap(base_vector<override_allocate, T, Derived, other_settings, other_allocator>& other) noexcept {
     std::swap(m_alloc, other.m_alloc);
     std::swap(m_begin, other.m_begin); std::swap(m_size, other.m_size);
     std::swap(m_cap, other.m_cap);
@@ -468,7 +477,7 @@ public:
   template <base_vector_settings other_settings, allocator_for_c<T> other_allocator>
   requires compatible_settings<other_settings> and same_c<Allocator, other_allocator>
   constexpr Derived&
-  operator=(base_vector<T, Derived, other_settings, other_allocator> &&other) noexcept {
+  operator=(base_vector<override_allocate, T, Derived, other_settings, other_allocator> &&other) noexcept {
     call_derived destroy(); call_derived deallocate();
     m_alloc = std::move(other.m_alloc);
     m_begin = other.m_begin; m_size = other.m_size; m_cap = other.m_cap;
@@ -502,7 +511,7 @@ public:
 #undef derived_const_iter
 #undef derived_const_rev_iter
 
-  edenInlineNodiscardCXPR T&       front()              noexcept { assert(m_begin); return *m_begin; }
+  edenInlineNodiscardCXPR T&       front()             noexcept { assert(m_begin); return *m_begin; }
   edenInlineNodiscardCXPR T const& front()       const noexcept { assert(m_begin); return *m_begin; }
   edenInlineNodiscardCXPR T&       back()              noexcept { assert(m_size); if constexpr (is_small) return m_begin[m_size - 1]; else return *(m_size-1); }
   edenInlineNodiscardCXPR T const& back()        const noexcept { assert(m_size); if constexpr (is_small) return m_begin[m_size - 1]; else return *(m_size-1); }
@@ -605,7 +614,7 @@ public:
   edenInlineCXPR void push_back(T const& value) noexcept requires copy_constructible { call_derived emplace_back(value); }
   edenInlineCXPR void push_back(T&& value)      noexcept requires move_constructible { call_derived emplace_back(std::move(value)); }
 
-  // values may not alias this vector
+  // values should not alias this vector
   constexpr void move_append_range(std::span<T> values) {
     auto const n = values.size();
     call_derived reserve(size() + n);
@@ -613,7 +622,7 @@ public:
     m_size += n;
   }
 
-  // values may not alias this vector
+  // values should not alias this vector
   constexpr void copy_append_range(std::span<T const> values) {
     auto const n = values.size();
     call_derived reserve(size() + n);
@@ -661,23 +670,6 @@ public:
   }
 
 };
-
-template <class T, class Derived, base_vector_settings lhs_settings, base_vector_settings rhs_settings, allocator_for_c<T> allocator>
-requires base_vector<T, Derived, lhs_settings, allocator>::template compatible_settings<rhs_settings>
-edenNodiscardCXPR bool
-operator==(const base_vector<T, Derived, lhs_settings, allocator>& lhs, const base_vector<T, Derived, rhs_settings, allocator>& rhs) noexcept
-requires std::equality_comparable<T> {
-  const auto& lhs_derived = static_cast<const Derived&>(lhs);
-  const auto& rhs_derived = static_cast<const Derived&>(rhs);
-  const auto sz = lhs_derived.size();
-  if (sz not_eq rhs_derived.size())
-    return false;
-  for (auto i{0uz}; i<sz; ++i) {
-    if (lhs_derived[i] not_eq rhs_derived[i])
-      return false;
-  }
-  return true;
-}
 
 #undef call_derived
 #undef call_derived_const

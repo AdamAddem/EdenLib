@@ -9,13 +9,13 @@ template<bool Small = false, u64_t ExpansionMult = 2>
 struct vector_settings { static constexpr base_vector_settings<Small, ExpansionMult> base_settings{}; };
 
 // Mostly standard vector implementation
-template <class T, vector_settings settings = vector_settings{}, allocator_for_c<T> Allocator = BasicAllocator<T>>
-class vector : public base_vector<T, vector<T, settings, Allocator>, settings.base_settings, Allocator> {
-  using base = base_vector<T, vector, settings.base_settings, Allocator>;
+template <class T, vector_settings settings = {}, allocator_for_c<T> Allocator = BasicAllocator<T>>
+class vector : public base_vector<false, T, vector<T, settings, Allocator>, settings.base_settings, Allocator> {
+  using base = base_vector<false, T, vector, settings.base_settings, Allocator>;
 public:
   using base::base;
 
-  template <class T_, vector_settings settings_, allocator_for_c<T_> Allocator_> friend class vector;
+  template <class T_, vector_settings, allocator_for_c<T_> Allocator_> friend class vector;
 
   // Must not access 'this' anymore, as its lifetime as a vector of T has ended.
   // Instead, access through the returned reference.
