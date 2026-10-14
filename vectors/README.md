@@ -186,6 +186,6 @@ Note that if you plan to use the m_size and m_cap members directly, you must acc
 If you don't plan on manipulating these members, prefer to use the size() and capacity() methods instead. <br>
 
 The first parameter in the base vector type is 'override_allocate'. <br>
-If you write your own versions of the 'allocate' or 'deallocate' methods, you *must* set this flag to true. <br>
+If you write your own versions of the 'allocate' or 'deallocate' methods, you **must** set this flag to true. <br>
 Doing so will disable the constructors that allocate, and requires you to write your own destructor deallocating and freeing the memory. <br>
 This is because calling the derived class's allocate and deallocate methods from the base classes' constructors or destructors would result in undefined behavior. <br>

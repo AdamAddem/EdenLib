@@ -44,7 +44,6 @@ struct swap_vector_settings {
 };
 
 template <class T, swap_vector_settings settings = {}, allocator_for_c<T> Allocator = BasicAllocator<T>>
-requires std::swappable<T>
 class swap_vector : public base_vector<false, T, swap_vector<T, settings, Allocator>, settings.base_settings, Allocator> {
   static constexpr auto stability = settings.stability;
   static constexpr auto preserve_back = settings.preserve_backmost;

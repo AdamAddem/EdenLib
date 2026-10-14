@@ -56,10 +56,10 @@ struct BasicAllocator {
   static constexpr bool supports_allocate_raw = true;
   static constexpr bool supports_reallocate = false;
 
-  static constexpr auto default_alignment = (align_t) std::max(alignof(T), (sz_t) __STDCPP_DEFAULT_NEW_ALIGNMENT__);
 
   edenInlineNodiscardCXPR static T*
   allocate(sz_t count) noexcept {
+  static constexpr auto default_alignment = (align_t) std::max(alignof(T), (sz_t) __STDCPP_DEFAULT_NEW_ALIGNMENT__);
     if consteval {
       return std::allocator<T>{}.allocate(count);
     }
@@ -91,6 +91,7 @@ struct BasicAllocator {
   // can't be constexpr because std::allocator needs the count as well :6
   edenAlwaysInline static void
   deallocate(T* allocated) noexcept {
+    static constexpr auto default_alignment = (align_t) std::max(alignof(T), (sz_t) __STDCPP_DEFAULT_NEW_ALIGNMENT__);
     if consteval {
       std::allocator<T>{}.deallocate(allocated);
     }
@@ -107,6 +108,7 @@ struct BasicAllocator {
 
   edenInlineCXPR static void
   deallocate(T* allocated, sz_t allocated_count) noexcept {
+    static constexpr auto default_alignment = (align_t) std::max(alignof(T), (sz_t) __STDCPP_DEFAULT_NEW_ALIGNMENT__);
     if consteval {
       std::allocator<T>{}.deallocate(allocated, allocated_count);
     }

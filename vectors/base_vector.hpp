@@ -1,10 +1,11 @@
 #pragma once
 #include "../macros.hpp"
-#include "../metaprogramming/concepts.hpp"
 #include "../type_flags.hpp"
 #include "../typedefs.hpp"
 #include "../allocators/basic_allocator.hpp"
+#include "../metaprogramming/concepts.hpp"
 
+#include <type_traits>
 #include <memory>
 #include <span>
 #include <string>
@@ -26,23 +27,19 @@ static constexpr void move_from_to(T* edenRestrict from, T* edenRestrict to, sz_
     }
   }
 
-  for (sz_t i{}; i<amount; ++i)
-    std::construct_at(to + i, std::move( from[i]) );
+  for (sz_t i{}; i<amount; ++i) std::construct_at(to + i, std::move( from[i]) );
 }
 
-// just moves items, does not destroy or deallocate
+// just copies items, does not destroy or deallocate
 template<class T>
 static constexpr void copy_from_to(T const* edenRestrict from, T* edenRestrict to, sz_t amount) {
-  if constexpr(edenTriviallyRelocatable(T)) {
-    std::memcpy(to, from, amount * sizeof(T));
-  }
-  else {
-    sz_t i{};
-    while (i not_eq amount) {
-      std::construct_at(to + i, from[i] );
-      ++i;
+  if not consteval {
+    if constexpr(std::is_trivially_copy_constructible_v<T>) {
+      std::memcpy(to, from, amount * sizeof(T));
     }
   }
+
+  for (sz_t i{}; i<amount; ++i) std::construct_at(to + i, from[i]);
 }
 
 }
@@ -409,8 +406,9 @@ public:
   edenInlineCXPR explicit base_vector(Allocator&& alloc) noexcept : m_alloc(std::move(alloc)) {}
 
   constexpr explicit base_vector(convertible_to_c<T> auto&&... values) noexcept
-  requires using_base_allocation
-  : base_vector(flags::reserve_initial<sizeof...(values)>) {
+  requires using_base_allocation {
+    allocate_from_empty(sizeof...(values));
+
     (emplace_back_unchecked(std::forward<decltype(values)>(values)), ...);
   }
 
@@ -459,12 +457,36 @@ public:
     return res;
   }
 
+  constexpr base_vector(base_vector&& other) noexcept
+  : m_alloc(std::move(other.m_alloc)), m_begin(other.m_begin), m_size(other.m_size), m_cap(other.m_cap) { other.unsafe_zero_members(); }
+
+  constexpr base_vector(Derived&& other) noexcept
+  : m_alloc(std::move(other.m_alloc)), m_begin(other.m_begin), m_size(other.m_size), m_cap(other.m_cap) { other.unsafe_zero_members(); }
+
+  constexpr base_vector&
+  operator=(base_vector&& other) noexcept {
+    call_derived destroy(); call_derived deallocate();
+    m_alloc = std::move(other.m_alloc);
+    m_begin = other.m_begin; m_size = other.m_size; m_cap = other.m_cap;
+    static_cast<Derived&>(other).unsafe_zero_members();
+    return *this;
+  }
+
+  constexpr Derived&
+  operator=(Derived&& other) noexcept {
+    call_derived destroy(); call_derived deallocate();
+    m_alloc = std::move(other.m_alloc);
+    m_begin = other.m_begin; m_size = other.m_size; m_cap = other.m_cap;
+    other.unsafe_zero_members();
+    return static_cast<Derived&>(*this);
+  }
+
   template <base_vector_settings other_settings, allocator_for_c<T> other_allocator>
   requires compatible_settings<other_settings> and same_c<Allocator, other_allocator>
-  edenInlineCXPR
-  base_vector(base_vector<override_allocate, T, Derived, other_settings, other_allocator> &&other) noexcept
-  : m_alloc(std::move(other.m_alloc)), m_begin(other.m_begin), m_size(other.m_size), m_cap(other.m_cap)
-  { static_cast<Derived&>(other).unsafe_zero_members(); }
+  constexpr base_vector(base_vector<override_allocate, T, Derived, other_settings, other_allocator> &&other) noexcept
+  : m_alloc(std::move(other.m_alloc)), m_begin(other.m_begin), m_size(other.m_size), m_cap(other.m_cap) {
+    static_cast<Derived&>(other).unsafe_zero_members();
+  }
 
   template <base_vector_settings other_settings, allocator_for_c<T> other_allocator>
   requires compatible_settings<other_settings> and same_c<Allocator, other_allocator>
@@ -615,18 +637,40 @@ public:
   edenInlineCXPR void push_back(T&& value)      noexcept requires move_constructible { call_derived emplace_back(std::move(value)); }
 
   // values should not alias this vector
+
+  template <bool PreserveGrowth = true>
   constexpr void move_append_range(std::span<T> values) {
+    auto const sz = size();
     auto const n = values.size();
-    call_derived reserve(size() + n);
-    detail::move_from_to(values.data(), &back(), n);
+
+    if constexpr (PreserveGrowth) {
+      auto const remaining_slots = capacity() - size();
+      if (n > remaining_slots)
+        expand_to( std::max(sz * expansion_mult, n) );
+    }
+    else {
+      call_derived reserve(sz + n);
+    }
+
+    detail::move_from_to(values.data(), m_begin + sz, n);
     m_size += n;
   }
 
   // values should not alias this vector
+  template <bool PreserveGrowth = true>
   constexpr void copy_append_range(std::span<T const> values) {
+    auto const sz = size();
     auto const n = values.size();
-    call_derived reserve(size() + n);
-    detail::copy_from_to(values.data(), &back(), n);
+
+    if constexpr (PreserveGrowth) {
+      auto const remaining_slots = capacity() - size();
+      if (n > remaining_slots)
+        expand_to( std::max(sz * expansion_mult, n) );
+    }
+    else
+      call_derived reserve(sz + n);
+
+    detail::copy_from_to(values.data(), m_begin + sz, n);
     m_size += n;
   }
 
