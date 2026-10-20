@@ -24,3 +24,5 @@ using uptr_t = std::uintptr_t;
 
 using byte_t = std::byte; static constexpr auto full_byte = byte_t{0xFF}; static constexpr auto empty_byte = byte_t{0x00};
 using align_t = std::align_val_t;
+
+using cstr_t = char const*;

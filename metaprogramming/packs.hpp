@@ -58,12 +58,6 @@ struct PackData {
   sz_t alignidx_to_typeidx[NumTs]; // maps an index in AT's back to an index in Ts
   sz_t alignidx_to_offset[NumTs];  // maps an index in AT's to its byte offset in a std::tuple<ATs...>
 
-  // Ts:      int, char, void*
-  // aligned: void*, int, char
-  // t_to_a:  [1, 2, 0]
-  // a_to_t:  [2, 0, 1]
-  // a_to_o: [0, 8, 12]
-
   // don't ask me how any of this works I totally forgot
   consteval PackData() noexcept {
 
@@ -80,11 +74,11 @@ struct PackData {
 
     static constexpr auto alignments_count_sz = std::bit_width(biggest_alignment);
     sz_t alignments_count[ alignments_count_sz ]{};
-    for(auto i{0uz}; i<NumTs; ++i)
+    for(sz_t i{}; i<NumTs; ++i)
       alignments_count[ std::bit_width( alignments[i] ) - 1 ] += 1;
 
-    auto i{0uz};
-    auto j{0uz};
+    sz_t i{};
+    sz_t j{};
     auto num{NumTs};
     while (i < alignments_count_sz) {
       auto& alignment_count = alignments_count[i];

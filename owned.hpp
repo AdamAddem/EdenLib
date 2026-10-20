@@ -1,6 +1,7 @@
 #pragma once
 #include "macros.hpp"
 #include "metaprogramming/concepts.hpp"
+#include "metaprogramming/utilities.hpp"
 #include "string_utils.hpp"
 #include "typedefs.hpp"
 
@@ -111,13 +112,7 @@ public:
 
 template <class T>
 using nullable_owned_ptr = owned_ptr<T>;
-template <sz_t N>
-using owned_bounded_cstr = owned_ptr<char[N]>;
 using owned_cstr = owned_ptr<char[]>;
-
-template <class, bool> struct ContainsIf {};
-template <class T>     struct ContainsIf<T, false> {};
-template <class T>     struct ContainsIf<T, true> {T m;};
 
 template <class T, sz_t Extent = std::dynamic_extent>
 requires (Extent > 0)

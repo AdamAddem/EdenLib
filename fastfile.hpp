@@ -3,79 +3,93 @@
 #include "macros.hpp"
 #include <system_error>
 #include <type_traits>
+#include <string_view>
 
 #if defined(__linux__) || defined(__APPLE__)
+#define IS_POSIX
+#endif
+
+#ifdef IS_POSIX
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
 #elifdef _WIN32
-
+#include <Windows.h>
+static_assert(false, "fastfile.hpp unsupported on your platform, sorry!");
+#else
+static_assert(false, "fastfile.hpp unsupported on your platform, sorry!");
 #endif
 
 namespace eden {
 
 namespace detail {
-#if defined(__linux__) || defined(__APPLE__)
-template <bool MaybeLarge = true>
+
+#ifdef IS_POSIX
 struct File {
-  char const* text;
-  std::conditional_t<MaybeLarge, sz_t, u32_t> size;
-  int fd;
+  char const* text = nullptr;
+  sz_t size = 0;
 
-  static File open(char const* path) edenThrows(std::system_error) {
+  static File open(cstr_t path) edenThrows(std::system_error) {
     File newfile;
-    newfile.fd = ::open(path, O_RDONLY);
+    auto const fd = ::open(path, O_RDONLY);
 
-    if(newfile.fd == -1)
+    if(fd == -1)
       throw std::system_error(errno, std::system_category(), "Failed to open file");
 
     {
       struct stat stat;
-      if(fstat(newfile.fd, &stat))
-        ::close(newfile.fd), throw std::system_error(errno, std::system_category(), "Failed to stat file.");
+      if(fstat(fd, &stat))
+        ::close(fd), throw std::system_error(errno, std::system_category(), "Failed to stat file.");
 
       newfile.size = (sz_t) stat.st_size;
     }
 
-    newfile.text = (char const*) mmap(nullptr, newfile.size, PROT_READ, MAP_PRIVATE | MAP_POPULATE, newfile.fd, 0);
+    newfile.text = (char const*) mmap(nullptr, newfile.size, PROT_READ, MAP_PRIVATE | MAP_POPULATE, fd, 0);
+    ::close(fd);
     if(newfile.text == MAP_FAILED)
-      ::close(newfile.fd), throw std::system_error(errno, std::system_category(), "Failed to mmap file.");
-
+      throw std::system_error(errno, std::system_category(), "Failed to mmap file.");
 
     return newfile;
   }
-  static void close(File&& file) noexcept {
-    assert(file.isOpen());
-    if( ::close(file.fd) ) assert(false), std::abort();
+
+#define pre assert(file.isOpen());
+  static void close(File&& file) noexcept { pre
     if( munmap((void*)file.text, file.size) ) assert(false), std::abort();
 
-    file.text = nullptr;
-    file.size = 0;
-    file.fd = -1;
+    file = {};
   }
+#undef pre
 
-  edenInlineNodiscard bool isOpen() noexcept { return text == nullptr; }
+  edenInlineNodiscard bool isOpen() const noexcept { return text == nullptr; }
 };
-
 #elifdef _WIN32
-
 #endif
 
 }
 
-template <bool MaybeLarge = false>
 class [[nodiscard]] FastFile {
-  using Fimpl = detail::File<MaybeLarge>;
+  using Fimpl = detail::File;
   Fimpl file;
 public:
   edenInlineNodiscard std::string_view get() const noexcept { return {file.text, file.size}; }
 
-  edenAlwaysInline FastFile(char const* path) edenThrows(std::system_error)
-  : file(Fimpl::open(path)) {
-    try { throw 0; } catch(...) {}
-  }
+  edenInlineCXPR FastFile() noexcept = default;
 
+  edenAlwaysInline explicit FastFile(cstr_t path) edenThrows(std::system_error)
+  : file(Fimpl::open(path)) {}
+
+#define pre assert(not file.isOpen());
+  void open(cstr_t path) edenThrows(std::system_error) { pre
+    file = Fimpl::open(path);
+  }
+#undef pre
+
+#define pre assert(file.isOpen());
+  void close() noexcept { pre
+    Fimpl::close(std::move(file));
+  }
+#undef pre
 
   edenAlwaysInline ~FastFile() {
     if(file.isOpen())
@@ -84,3 +98,5 @@ public:
 };
 
 }
+
+#undef IS_POSIX
