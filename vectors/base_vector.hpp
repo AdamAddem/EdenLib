@@ -545,10 +545,25 @@ public:
   edenInlineCXPR          void     clear()             noexcept { call_derived destroy(); }
   edenInlineNodiscardCXPR bool     at_capacity() const noexcept { return size() == capacity(); }
 
-  edenInlineNodiscardCXPR explicit operator std::span<T>() noexcept { return std::span(m_begin, call_derived size()); }
-  edenInlineNodiscardCXPR explicit operator std::span<const T>() const noexcept { return std::span(m_begin, call_derived_const size()); }
-  edenInlineNodiscardCXPR std::span<T> to_span() noexcept { return call_derived operator std::span<T>(); }
-  edenInlineNodiscardCXPR std::span<const T> to_span() const noexcept { return call_derived_const operator std::span<const T>(); }
+  edenInlineNodiscardCXPR std::span<T>       to_span()       noexcept { return std::span(m_begin, call_derived size()); }
+  edenInlineNodiscardCXPR std::span<T const> to_span() const noexcept { return std::span(m_begin, call_derived_const size()); }
+
+  edenInlineNodiscardCXPR std::span<T>
+  to_span(count_t offset, count_t length) noexcept {
+    assert(offset <= call_derived size()); assert(offset == call_derived size() ? length == 0 : true);
+    assert(length <= call_derived size());
+    return std::span(m_begin + offset, length);
+  }
+
+  edenInlineNodiscardCXPR std::span<T const>
+  to_span(count_t offset, count_t length) const noexcept {
+    assert(offset <= call_derived_const size()); assert(offset == call_derived_const size() ? length == 0 : true);
+    assert(length <= call_derived_const size());
+    return std::span(m_begin + offset, length);
+  }
+
+  edenInlineNodiscardCXPR explicit operator std::span<T>() noexcept { return call_derived to_span(); }
+  edenInlineNodiscardCXPR explicit operator std::span<T const>() const noexcept { return call_derived_const to_span(); }
 
   constexpr void reserve(count_t new_capacity) noexcept {
     if(call_derived capacity() >= new_capacity) return;

@@ -84,8 +84,7 @@ struct multi_iter_maker {
 // Each span must have the same size.
 #define pre assert(detail::allEqual(spans.size()...));
 template<class... Ts>
-edenAlwaysInline constexpr auto iter_over(std::span<Ts>... spans) noexcept {
-  pre
+edenAlwaysInline constexpr auto iter_over(std::span<Ts>... spans) noexcept { pre
   return detail::multi_iter_maker{spans...};
 }
 #undef pre

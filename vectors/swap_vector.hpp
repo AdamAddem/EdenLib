@@ -188,6 +188,25 @@ public:
     edenUnreachable("Element matching element_id was not found in eden::swap_vector::gradual_sort_search. Ensure that such element exists.");
   }
 
+  // will swap each element into the index specified by GetIdxOf
+  // only really useful if the object itself keeps track of its original insertion order
+  // does NOT respect PreserveBackmost
+  constexpr void sort_by_unique_idx(auto&& GetIdxOf)
+  requires((not is_map) and convertible_to_c<std::invoke_result_t<decltype(GetIdxOf), T const&>, count_t>) {
+    auto const sz = this->size();
+    bool swapped = false;
+    auto curr_idx{sz};
+    while (curr_idx-- not_eq 0) {
+      auto& element = m_begin[curr_idx];
+      count_t const idx = GetIdxOf(element); assert(idx < sz);
+      if (idx != curr_idx) {
+        std::swap(element, m_begin[idx]);
+        swapped = true;
+      }
+    }
+    if (swapped == true) sort_by_unique_idx(std::forward<decltype(GetIdxOf)>(GetIdxOf));
+  }
+
   // returns whether the vector is ordered, such that for all elements GetIdxOf(element) == the element's index in the vector
   edenNodiscardCXPR bool
   is_ordered(auto&& GetIdxOf) noexcept
